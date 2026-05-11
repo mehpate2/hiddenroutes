@@ -1,0 +1,11 @@
+User-agent: *
+Disallow: /api/
+Disallow: /app/
+Disallow: /dashboard/
+Disallow: /settings/
+Disallow: /payment/
+
+User-agent: *
+Allow: /
+Allow: /signup
+Allow: /login
