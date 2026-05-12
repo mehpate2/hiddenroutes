@@ -39,6 +39,40 @@
       "fields": [
         { "fieldPath": "points", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "reddit_places",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status",  "order": "ASCENDING"  },
+        { "fieldPath": "upvotes", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reddit_places",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status",     "order": "ASCENDING"  },
+        { "fieldPath": "state",      "order": "ASCENDING"  },
+        { "fieldPath": "upvotes",    "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reddit_places",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status",     "order": "ASCENDING"  },
+        { "fieldPath": "confidence", "order": "ASCENDING"  },
+        { "fieldPath": "upvotes",    "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reddit_places",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "name",  "order": "ASCENDING" },
+        { "fieldPath": "state", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

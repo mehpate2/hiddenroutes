@@ -118,6 +118,63 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.url === '/api/reddit-import' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const { subreddit, limit: lim = 100 } = JSON.parse(body);
+        if (!subreddit) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'subreddit required' })); return; }
+
+        // Fetch Reddit posts
+        const rdRes = await fetch(`https://www.reddit.com/r/${subreddit}/top.json?limit=${lim}&t=all`, {
+          headers: { 'User-Agent': 'ExploreAI/1.0 (hidden-places-discovery)' },
+        });
+        if (!rdRes.ok) throw new Error(`Reddit ${rdRes.status}`);
+        const rdJson = await rdRes.json();
+        const allPosts = (rdJson?.data?.children || []).map(c => ({
+          title: c.data.title || '', body: c.data.selftext || '',
+          url: `https://reddit.com${c.data.permalink}`, upvotes: c.data.score || 0,
+        }));
+        const filtered = allPosts.filter(p => p.upvotes > 50 && (p.title.length + p.body.length) > 30);
+
+        // Batch AI extraction (5 posts per call)
+        const BATCH = 5;
+        const allPlaces = [];
+        for (let i = 0; i < filtered.length; i += BATCH) {
+          const batch = filtered.slice(i, i + BATCH);
+          const postsText = batch.map((p, idx) =>
+            `--- POST ${idx + 1} ---\nTitle: ${p.title}\nUpvotes: ${p.upvotes}\nURL: ${p.url}\nBody: ${(p.body || '').slice(0, 800)}`
+          ).join('\n\n');
+          try {
+            const msg = await anthropic.messages.create({
+              model: 'claude-haiku-4-5-20251001', max_tokens: 2000,
+              messages: [{ role: 'user', content: `Analyze these Reddit posts and extract hidden/lesser-known US places.\n\n${postsText}\n\nRules: specific named places only, US only, genuinely hidden (not major national parks).\nReturn ONLY JSON array ([] if none): [{"name":"str","description":"2 sentences","state":"full state name","city":"nearest city","coordinates":{"lat":0.0,"lng":0.0},"category":"nature|waterfall|cave|viewpoint|beach|trail|forest|lake","why_hidden":"str","local_tip":"str","confidence":"high|medium|low","source_url":"url","upvotes":0}]` }],
+            });
+            const text = msg.content[0].text;
+            const match = text.match(/\[[\s\S]*\]/);
+            if (match) {
+              const places = JSON.parse(match[0]);
+              if (Array.isArray(places)) {
+                allPlaces.push(...places.filter(p => p.confidence !== 'low' && p.name && p.state).map(p => ({ ...p, subreddit })));
+              }
+            }
+          } catch (batchErr) {
+            console.warn(`[reddit-import] batch ${i} error:`, batchErr.message);
+          }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ places: allPlaces, postsScanned: filtered.length, totalPosts: allPosts.length, found: allPlaces.length }));
+      } catch (err) {
+        console.error('[reddit-import]', err.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Not found' }));
 });

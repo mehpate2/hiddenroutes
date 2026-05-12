@@ -151,6 +151,7 @@ export default function NavBarAuth({ view, onNav, savedCount }) {
                 { icon:'🗺️', label:'Community',        action: () => navigate('/community') },
                 { icon:'🔍', label:'Discover Feed',   action: () => navigate('/discover') },
                 { icon:'⚙️', label:'Settings',        action: () => navigate('/settings') },
+                { icon:'🔴', label:'Reddit Import',   action: () => navigate('/admin/import') },
               ].map(item => (
                 <button key={item.label} onClick={() => { item.action(); setUserMenu(false); }}
                   style={{ width:'100%', display:'flex', alignItems:'center', gap:10, padding:'10px 16px', background:'none', border:'none', cursor:'pointer', color:D.off, fontSize:13, fontFamily:D.font, textAlign:'left', transition:'background 0.15s' }}

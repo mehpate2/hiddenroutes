@@ -9,6 +9,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getDiscoverFeed, addReview, getReviews } from '../lib/community';
+import { getRedditDiscoverStats } from '../lib/reddit';
 
 const D = {
   navy: '#0A0F1E', teal: '#00D2FF', gold: '#C9A84C',
@@ -145,6 +146,55 @@ function FeedCard({ sub, userId, onReviewPosted }) {
   );
 }
 
+// ─── Reddit Stats Banner ──────────────────────────────────────────────────────
+function RedditStatsBanner() {
+  const [stats, setStats] = useState(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    getRedditDiscoverStats().then(s => { if (s.total > 0) setStats(s); });
+  }, []);
+
+  if (!stats || stats.total === 0) return null;
+
+  return (
+    <div style={{ marginBottom: 24, borderRadius: 18, border: '1px solid rgba(249,115,22,0.3)', background: 'rgba(249,115,22,0.06)', overflow: 'hidden' }}>
+      <div style={{ padding: '14px 18px', borderBottom: '1px solid rgba(249,115,22,0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <div style={{ color: '#F97316', fontWeight: 800, fontSize: 15 }}>🔴 From the Reddit Community</div>
+          <div style={{ color: D.muted, fontSize: 12, marginTop: 2 }}>{stats.total} hidden places discovered from real explorers</div>
+        </div>
+        <button onClick={() => navigate('/admin/import')} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(249,115,22,0.4)', background: 'transparent', color: '#F97316', fontSize: 12, cursor: 'pointer', fontFamily: D.font }}>
+          View All →
+        </button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 0 }}>
+        {stats.mostUpvoted && (
+          <div style={{ padding: '12px 16px', borderRight: '1px solid rgba(249,115,22,0.15)' }}>
+            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>Most Upvoted</div>
+            <div style={{ color: D.white, fontWeight: 700, fontSize: 13, marginBottom: 2 }}>{stats.mostUpvoted.name}</div>
+            <div style={{ color: '#F97316', fontSize: 11 }}>▲ {(stats.mostUpvoted.upvotes || 0).toLocaleString()}</div>
+          </div>
+        )}
+        {stats.newest && (
+          <div style={{ padding: '12px 16px', borderRight: '1px solid rgba(249,115,22,0.15)' }}>
+            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>Newest Find</div>
+            <div style={{ color: D.white, fontWeight: 700, fontSize: 13 }}>{stats.newest.name}</div>
+            <div style={{ color: D.muted, fontSize: 11 }}>{stats.newest.state}</div>
+          </div>
+        )}
+        {stats.topSubreddit && (
+          <div style={{ padding: '12px 16px' }}>
+            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>Top Source</div>
+            <div style={{ color: D.white, fontWeight: 700, fontSize: 13 }}>r/{stats.topSubreddit.name}</div>
+            <div style={{ color: D.muted, fontSize: 11 }}>{stats.topSubreddit.count} places found</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Filter Bar ───────────────────────────────────────────────────────────────
 function FilterBar({ cat, setCat, state, setState }) {
   const cats = ['All', 'Nature', 'History', 'Food', 'Adventure', 'Art'];
@@ -219,6 +269,7 @@ export default function DiscoverFeed() {
 
       {/* Content */}
       <div style={{ maxWidth: 680, margin: '0 auto', padding: '24px 20px' }}>
+        <RedditStatsBanner />
         <FilterBar cat={catFilter} setCat={setCatFilter} />
 
         {filtered.length === 0 && !loading && (

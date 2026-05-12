@@ -12,6 +12,7 @@ import Community from './pages/Community';
 import DiscoverFeed from './pages/DiscoverFeed';
 import SubmitPlace from './pages/SubmitPlace';
 import UserProfile from './pages/UserProfile';
+import AdminImport from './pages/AdminImport';
 import ProtectedRoute from './components/ProtectedRoute';
 import Toast from './components/Toast';
 
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/discover" element={<DiscoverFeed />} />
         <Route path="/submit" element={<ProtectedRoute><SubmitPlace /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
+        <Route path="/admin/import" element={<ProtectedRoute><AdminImport /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {toast && <Toast msg={toast.msg} type={toast.type} key={toast.id} />}
