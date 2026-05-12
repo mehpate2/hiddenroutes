@@ -13,7 +13,10 @@ const BATCH = 5; // posts per Claude call
 async function fetchRedditPosts(subreddit, limit = 100) {
   const url = `https://www.reddit.com/r/${subreddit}/top.json?limit=${limit}&t=all`;
   const res  = await fetch(url, {
-    headers: { 'User-Agent': 'ExploreAI/1.0 (hidden-places-discovery)' },
+    headers: {
+      'User-Agent': 'HiddenRoutes/1.0 (travel discovery app)',
+      'Accept':     'application/json',
+    },
   });
   if (!res.ok) throw new Error(`Reddit fetch failed: ${res.status}`);
   const json = await res.json();

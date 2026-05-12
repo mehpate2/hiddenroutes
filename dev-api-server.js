@@ -128,7 +128,10 @@ const server = http.createServer(async (req, res) => {
 
         // Fetch Reddit posts
         const rdRes = await fetch(`https://www.reddit.com/r/${subreddit}/top.json?limit=${lim}&t=all`, {
-          headers: { 'User-Agent': 'ExploreAI/1.0 (hidden-places-discovery)' },
+          headers: {
+            'User-Agent': 'HiddenRoutes/1.0 (travel discovery app)',
+            'Accept':     'application/json',
+          },
         });
         if (!rdRes.ok) throw new Error(`Reddit ${rdRes.status}`);
         const rdJson = await rdRes.json();

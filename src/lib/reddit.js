@@ -12,8 +12,8 @@ import {
 import { db } from '../firebase';
 
 export const SUBREDDITS = [
-  'hiking', 'CampingandHiking', 'HiddenGems', 'offbeat', 'roadtrip',
-  'travel', 'PNWhiking', 'socalhiking', 'Colorado', 'alaska',
+  'hiking', 'CampingAndHiking', 'HiddenGems', 'offbeat', 'roadtrip',
+  'travel', 'PNWhikers', 'socalhiking', 'Colorado', 'alaska',
   'hawaii', 'camping', 'NationalParks', 'backpacking',
 ];
 
