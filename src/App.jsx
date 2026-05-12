@@ -8,6 +8,10 @@ import ChoosePlan from './pages/ChoosePlan';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import PaymentSuccess from './pages/PaymentSuccess';
+import Community from './pages/Community';
+import DiscoverFeed from './pages/DiscoverFeed';
+import SubmitPlace from './pages/SubmitPlace';
+import UserProfile from './pages/UserProfile';
 import ProtectedRoute from './components/ProtectedRoute';
 import Toast from './components/Toast';
 
@@ -36,6 +40,10 @@ export default function App() {
         <Route path="/app" element={<ProtectedRoute><ExploreApp /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+        <Route path="/community" element={<Community />} />
+        <Route path="/discover" element={<DiscoverFeed />} />
+        <Route path="/submit" element={<ProtectedRoute><SubmitPlace /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {toast && <Toast msg={toast.msg} type={toast.type} key={toast.id} />}

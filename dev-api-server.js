@@ -90,6 +90,34 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.url === '/api/verify-place' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const { name, description, category, coordinates } = JSON.parse(body);
+        const msg = await anthropic.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 300,
+          messages: [{
+            role: 'user',
+            content: `You are verifying a community-submitted "hidden place" for a travel app.\n\nPlace name: ${name}\nCategory: ${category}\nDescription: ${description}\nCoordinates: ${coordinates ? `${coordinates.lat}, ${coordinates.lng}` : 'not provided'}\n\nRate this on plausibility, hidden gem quality, and description quality.\nReturn ONLY valid JSON: {"score":0-100,"verdict":"approved"|"review"|"rejected","reason":"1 sentence"}\n- score 75+ = approved, 40-74 = review, <40 = rejected`,
+          }],
+        });
+        const text = msg.content[0].text;
+        const match = text.match(/\{[\s\S]*\}/);
+        const result = match ? JSON.parse(match[0]) : { score: 50, verdict: 'review', reason: 'Parse error' };
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        console.error('[verify-place]', err.message);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ score: 50, verdict: 'review', reason: 'AI service unavailable' }));
+      }
+    });
+    return;
+  }
+
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Not found' }));
 });

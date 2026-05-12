@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Users ──────────────────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read:  if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ── Community submissions ──────────────────────────────────────────────
+    match /submissions/{subId} {
+      allow read: if true;
+      // Create: must be logged in, userId must match auth uid
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid;
+      // Update: anyone logged in can vote (confirmVotes / rejectVotes only)
+      allow update: if request.auth != null && (
+        // Owner can't update status directly (backend/functions do that)
+        // Voters can only touch vote arrays and updatedAt
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['confirmVotes', 'rejectVotes', 'updatedAt', 'status'])
+      );
+      allow delete: if false;
+    }
+
+    // ── Reviews ────────────────────────────────────────────────────────────
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid;
+      // Only helpful votes can be updated
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['helpfulVotes']);
+      allow delete: if false;
+    }
+
+    // ── Notifications ──────────────────────────────────────────────────────
+    match /notifications/{notifId} {
+      allow read:   if request.auth != null && resource.data.uid == request.auth.uid;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && resource.data.uid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow delete: if false;
+    }
+  }
+}

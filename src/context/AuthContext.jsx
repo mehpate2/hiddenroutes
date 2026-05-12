@@ -16,8 +16,9 @@ import {
   updateProfile as firebaseUpdateProfile,
   onAuthStateChanged,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, onSnapshot, serverTimestamp, increment } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
+import { getLevelInfo, subscribeNotifications, POINTS } from '../lib/community';
 
 const AuthContext = createContext(null);
 
@@ -40,7 +41,14 @@ async function createUserDoc(user, extraData = {}) {
       statesExplored: [],
       savedPlaces: [],
       routesPlanned: 0,
-      createdAt: serverTimestamp(),
+      // Community fields
+      points:           0,
+      submissionsCount: 0,
+      approvedCount:    0,
+      reviewsCount:     0,
+      badges:           [],
+      lastLoginDate:    new Date().toDateString(),
+      createdAt:        serverTimestamp(),
       ...extraData,
     });
   }
@@ -54,10 +62,12 @@ async function getUserPlan(uid) {
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser]       = useState(null);
-  const [plan, setPlan]       = useState('free');
-  const [loading, setLoading] = useState(true);
-  const [toast, setToast]     = useState(null);
+  const [user, setUser]             = useState(null);
+  const [plan, setPlan]             = useState('free');
+  const [loading, setLoading]       = useState(true);
+  const [toast, setToast]           = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [userPoints, setUserPoints] = useState(0);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type, id: Date.now() });
@@ -65,17 +75,43 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
+    let unsubNotif = null;
+    let unsubUser  = null;
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
         const p = await getUserPlan(u.uid);
         setPlan(p);
+
+        // Real-time user doc listener — keeps points current mid-session
+        unsubUser = onSnapshot(doc(db, 'users', u.uid), (snap) => {
+          if (snap.exists()) setUserPoints(snap.data().points || 0);
+        });
+
+        // Real-time notifications
+        unsubNotif = subscribeNotifications(u.uid, setNotifications);
+
+        // Daily login points
+        try {
+          const today = new Date().toDateString();
+          const snap  = await getDoc(doc(db, 'users', u.uid));
+          if (snap.exists() && snap.data()?.lastLoginDate !== today) {
+            await updateDoc(doc(db, 'users', u.uid), {
+              points:        increment(POINTS.dailyLogin),
+              lastLoginDate: today,
+            });
+          }
+        } catch {}
       } else {
         setPlan('free');
+        setNotifications([]);
+        setUserPoints(0);
+        if (unsubNotif) { unsubNotif(); unsubNotif = null; }
+        if (unsubUser)  { unsubUser();  unsubUser  = null; }
       }
       setLoading(false);
     });
-    return unsub;
+    return () => { unsub(); if (unsubNotif) unsubNotif(); if (unsubUser) unsubUser(); };
   }, []);
 
   async function login(email, password) {
@@ -141,6 +177,8 @@ export function AuthProvider({ children }) {
   const planData        = PLANS[plan] || PLANS.free;
   const canAccessState  = (idx) => idx < planData.statesLimit;
   const canSave         = (count) => count < planData.savedLimit;
+  const levelInfo       = getLevelInfo(userPoints);
+  const unreadCount     = notifications.length;
 
   return (
     <AuthContext.Provider value={{
@@ -150,6 +188,8 @@ export function AuthProvider({ children }) {
       canAccessState, canSave,
       showToast,
       isConfigured: true,
+      notifications, unreadCount,
+      userPoints, levelInfo,
     }}>
       {children}
     </AuthContext.Provider>

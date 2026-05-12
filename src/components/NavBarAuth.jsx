@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import NotificationBell from './NotificationBell';
 
 const D = {
   navy:'#0A0F1E', teal:'#00D2FF', tealDim:'rgba(0,210,255,0.18)',
@@ -53,6 +54,7 @@ export default function NavBarAuth({ view, onNav, savedCount }) {
     { label:'Plan Route',icon:'🛣️',  view:'route' },
     { label:'Saved',     icon:'❤️',  view:'saved',  badge:savedCount },
     { label:'Near Me',   icon:'📍',  view:'nearme' },
+    { label:'Discover',  icon:'🌟',  view:'discover' },
   ];
 
   const ns = { position:'fixed', top:0, left:0, right:0, zIndex:900, backdropFilter:'blur(16px)', background:'rgba(10,15,30,0.88)', borderBottom:`1px solid ${D.border}`, fontFamily:D.font };
@@ -76,6 +78,10 @@ export default function NavBarAuth({ view, onNav, savedCount }) {
           {user ? (
             <>
               <button onClick={() => { navigate('/dashboard'); setMenu(false); }} style={ls(false)}>📊 Dashboard</button>
+              <button onClick={() => { navigate('/community'); setMenu(false); }} style={ls(false)}>🗺️ Community</button>
+              <button onClick={() => { navigate('/discover');  setMenu(false); }} style={ls(false)}>🔍 Discover</button>
+              <button onClick={() => { navigate('/submit');    setMenu(false); }} style={ls(false)}>📍 Submit Place</button>
+              <button onClick={() => { navigate('/profile');   setMenu(false); }} style={ls(false)}>🌟 My Profile</button>
               <button onClick={() => { navigate('/settings');  setMenu(false); }} style={ls(false)}>⚙️ Settings</button>
               <button onClick={async () => { await logout(); navigate('/'); setMenu(false); }} style={ls(false)}>🚪 Logout</button>
             </>
@@ -103,6 +109,18 @@ export default function NavBarAuth({ view, onNav, savedCount }) {
 
       <div style={{ flex:1 }} />
 
+      {/* Community nav buttons */}
+      <button onClick={() => navigate('/community')} style={{ ...ls(false), color: D.gold }}
+        onMouseEnter={e => e.currentTarget.style.color = '#fff'}
+        onMouseLeave={e => e.currentTarget.style.color = D.gold}>
+        🗺️ Community
+      </button>
+      <button onClick={() => navigate('/submit')} style={{ padding:'7px 14px', borderRadius:8, border:'none', background:'linear-gradient(135deg,#C9A84C,#e8960a)', color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:D.font, minHeight:44 }}>
+        + Submit
+      </button>
+
+      {user && <NotificationBell />}
+
       {user ? (
         <div ref={userMenuRef} style={{ position:'relative' }}>
           {/* User button */}
@@ -126,10 +144,13 @@ export default function NavBarAuth({ view, onNav, savedCount }) {
                 <div style={{ fontSize:11, color:D.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{user.email}</div>
               </div>
               {[
-                { icon:'📊', label:'Dashboard',    action: () => navigate('/dashboard') },
-                { icon:'❤️', label:'Saved Places',  action: () => onNav('saved') },
-                { icon:'🛣️', label:'My Routes',     action: () => onNav('route') },
-                { icon:'⚙️', label:'Settings',      action: () => navigate('/settings') },
+                { icon:'📊', label:'Dashboard',       action: () => navigate('/dashboard') },
+                { icon:'❤️', label:'Saved Places',    action: () => onNav('saved') },
+                { icon:'🛣️', label:'My Routes',       action: () => onNav('route') },
+                { icon:'🌟', label:'My Profile',       action: () => navigate('/profile') },
+                { icon:'🗺️', label:'Community',        action: () => navigate('/community') },
+                { icon:'🔍', label:'Discover Feed',   action: () => navigate('/discover') },
+                { icon:'⚙️', label:'Settings',        action: () => navigate('/settings') },
               ].map(item => (
                 <button key={item.label} onClick={() => { item.action(); setUserMenu(false); }}
                   style={{ width:'100%', display:'flex', alignItems:'center', gap:10, padding:'10px 16px', background:'none', border:'none', cursor:'pointer', color:D.off, fontSize:13, fontFamily:D.font, textAlign:'left', transition:'background 0.15s' }}

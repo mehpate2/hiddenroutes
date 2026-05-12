@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import NavBarAuth from './components/NavBarAuth';
 import UpgradeModal from './components/UpgradeModal';
+import { getDiscoverFeed } from './lib/community';
 
 const KEY    = import.meta.env.VITE_ANTHROPIC_API_KEY;
 const HAIKU  = 'claude-haiku-4-5-20251001';
@@ -405,6 +406,10 @@ function StateCard({ state, onClick, locked }) {
 }
 
 // ─── Map Explore ─────────────────────────────────────────────────────────────
+function communityPin(L, gold='#C9A84C') {
+  return L.divIcon({ className:'', html:`<div style="width:22px;height:22px;border-radius:50%;background:${gold};border:2px solid #fff;box-shadow:0 0 8px ${gold}99;display:flex;align-items:center;justify-content:center;font-size:11px;">🌟</div>`, iconSize:[22,22], iconAnchor:[11,11] });
+}
+
 function MapExplore({ state, onModal, userLocation }) {
   const mobile=useMobile();
   const mapRef=useRef(null), mapDivRef=useRef(null), markersRef=useRef([]);
@@ -423,6 +428,24 @@ function MapExplore({ state, onModal, userLocation }) {
     let cancel=false, map=null;
     const accumulated=[];
     const addMarkers=(L,newPlaces)=>{ newPlaces.forEach(p=>{ const c=CAT_COLOR[p.category]||'#64748b'; const mk=L.marker([p.lat,p.lng],{icon:pin(L,c)}).addTo(map); mk.bindTooltip(p.name,{direction:'top',offset:[0,-40]}); mk.on('click',()=>onModal(p,state.name)); markersRef.current.push({marker:mk,place:p}); }); };
+    const addCommunityMarkers=async(L)=>{
+      try {
+        const { docs } = await getDiscoverFeed(50);
+        docs.forEach(d=>{
+          const sub=d.data();
+          if(sub.state!==state.name) return;
+          if(!sub.coordinates?.lat||!sub.coordinates?.lng) return;
+          const mk=L.marker([sub.coordinates.lat,sub.coordinates.lng],{icon:communityPin(L)}).addTo(map);
+          mk.bindTooltip(`🌟 ${sub.name} (community)`,{direction:'top',offset:[0,-14]});
+          mk.on('click',()=>onModal({
+            name:sub.name, lat:sub.coordinates.lat, lng:sub.coordinates.lng,
+            category:sub.category, description:sub.description,
+            localTip:sub.localTip||'Community verified hidden gem!',
+            rating:4.5, isCommunity:true,
+          }, state.name));
+        });
+      } catch {}
+    };
     const init=async()=>{
       const L=await loadLeaflet(); if(cancel)return;
       map=L.map(mapDivRef.current).setView(state.center,7); mapRef.current=map;
@@ -436,6 +459,7 @@ function MapExplore({ state, onModal, userLocation }) {
       try { await fetchAllRegionsParallel(state, onBatch); if(!cancel){ setLoading(false); } }
       catch(e) { if(!cancel){ setError(e.message); setLoading(false); } }
       preloadNeighbors(state);
+      if(!cancel) addCommunityMarkers(L);
     };
     init().catch(e=>{ if(!cancel){setError(e.message);setLoading(false);} });
     return()=>{ cancel=true; markersRef.current=[]; if(map)map.remove(); mapRef.current=null; };
@@ -743,6 +767,7 @@ export default function ExploreApp() {
       },()=>setView('states'));
       return;
     }
+    if(v==='discover'){ navigate('/discover'); return; }
     setView(v);
   };
 
