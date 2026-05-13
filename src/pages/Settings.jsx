@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential, deleteUser } from 'firebase/auth';
 import { auth, isConfigured } from '../firebase';
@@ -180,6 +180,32 @@ export default function Settings() {
               </button>
             </div>
           )}
+        </Section>
+
+        {/* Connected Accounts */}
+        <Section title="📱 Connected Accounts">
+          <p style={{ color:D.muted, fontSize:13, lineHeight:1.6, marginBottom:16 }}>
+            Link your social accounts to auto-import hidden places you post with <strong style={{ color:'#00D2FF' }}>#hiddenroutes</strong>.
+          </p>
+          {[
+            { platform:'instagram', icon:'📸', name:'Instagram', gradient:'linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)' },
+            { platform:'tiktok',   icon:'🎵', name:'TikTok',    gradient:'linear-gradient(135deg,#010101,#fe2c55)'          },
+            { platform:'snapchat', icon:'👻', name:'Snapchat',  gradient:'linear-gradient(135deg,#FFFC00,#FFE600)'          },
+          ].map(p => (
+            <div key={p.platform} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 0', borderBottom:`1px solid rgba(255,255,255,0.06)` }}>
+              <div style={{ width:38, height:38, borderRadius:10, background:p.gradient, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>{p.icon}</div>
+              <div style={{ flex:1 }}>
+                <div style={{ color:D.white, fontWeight:600, fontSize:14 }}>{p.name}</div>
+                <div style={{ color:D.muted, fontSize:12 }}>Post with #hiddenroutes to add places</div>
+              </div>
+              <Link to="/settings/social" style={{ padding:'7px 14px', borderRadius:8, border:`1px solid ${D.border}`, background:'rgba(255,255,255,0.05)', color:D.white, fontSize:12, fontWeight:600, textDecoration:'none', fontFamily:D.font }}>Manage</Link>
+            </div>
+          ))}
+          <div style={{ marginTop:16 }}>
+            <Link to="/settings/social" style={{ display:'inline-block', padding:'10px 22px', borderRadius:10, border:'none', background:'linear-gradient(135deg,#833ab4,#fd1d1d)', color:'#fff', fontSize:13, fontWeight:700, textDecoration:'none', fontFamily:D.font }}>
+              Manage Social Connections →
+            </Link>
+          </div>
         </Section>
 
         {/* Danger Zone */}

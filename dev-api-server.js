@@ -366,6 +366,41 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.url === '/api/extract-social-place' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const { caption, platform, location } = JSON.parse(body);
+        const msg = await anthropicWithRetry({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 500,
+          messages: [{
+            role: 'user',
+            content: `You are analyzing a ${platform} post for a travel app that maps hidden US places.
+
+CAPTION: ${caption}
+LOCATION HINT: ${location || 'none given'}
+
+Extract the hidden place and return ONLY valid JSON:
+{"name":"place name or null","description":"2 sentences or null","state":"full US state name or null","city":"nearest city or null","category":"nature|beach|historic|hidden|viewpoint|local","whyHidden":"1 sentence or null","coordinates":{"lat":number,"lng":number} or null,"score":0-100,"isValidPlace":bool}
+
+score 70+ = specific named hidden US place with good description. Return null for name if post isn't about a specific place.`,
+          }],
+        });
+        const match = msg.content[0].text.match(/\{[\s\S]*\}/);
+        const result = match ? JSON.parse(match[0]) : { name: null, score: 0, isValidPlace: false };
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        console.error('[extract-social-place]', err.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
   if (req.url === '/api/reddit-import' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });

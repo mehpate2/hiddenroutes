@@ -13,6 +13,7 @@ import UpgradeModal from './components/UpgradeModal';
 import { getDiscoverFeed } from './lib/community';
 import { getApprovedRedditPlacesForState } from './lib/reddit';
 import { getVerifiedPlacesForState } from './lib/verified';
+import { getApprovedSocialPlacesForState } from './lib/social';
 
 const KEY    = import.meta.env.VITE_ANTHROPIC_API_KEY;
 const HAIKU  = 'claude-haiku-4-5-20251001';
@@ -361,6 +362,13 @@ function PlaceModal({ place, stateName, onClose }) {
             {place.isCommunity&&<div style={{marginBottom:12,padding:'8px 12px',background:'rgba(201,168,76,0.1)',border:'1px solid rgba(201,168,76,0.3)',borderRadius:10,display:'flex',alignItems:'center',gap:8}}>
               <span style={{fontSize:12,fontWeight:700,color:'#C9A84C'}}>🌟 Community Verified Hidden Gem</span>
             </div>}
+            {place.isSocial&&(()=>{const pc={instagram:{icon:'📸',color:'#fd1d1d',name:'Instagram'},tiktok:{icon:'🎵',color:'#fe2c55',name:'TikTok'},snapchat:{icon:'👻',color:'#FFFC00',name:'Snapchat'}}[place.platform]||{icon:'📸',color:'#fd1d1d',name:'Social'};return(<div style={{marginBottom:12,padding:'10px 14px',background:pc.color+'10',border:`1px solid ${pc.color}33`,borderRadius:12}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                <span style={{fontSize:12,fontWeight:700,color:pc.color}}>{pc.icon} {pc.name} Import</span>
+                {place.username&&<span style={{fontSize:11,color:'rgba(255,255,255,0.5)'}}>by {place.username}</span>}
+                {place.postUrl&&<a href={place.postUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:pc.color,textDecoration:'none',marginLeft:'auto'}}>View Post ↗</a>}
+              </div>
+            </div>);})()}
             {place.isVerified&&<div style={{marginBottom:12,padding:'10px 14px',background:'rgba(139,92,246,0.08)',border:'1px solid rgba(139,92,246,0.3)',borderRadius:12}}>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:place.address?6:0}}>
                 <span style={{fontSize:12,fontWeight:700,color:'#8B5CF6'}}>✓ Personally Verified Location</span>
@@ -385,7 +393,20 @@ function PlaceModal({ place, stateName, onClose }) {
               <div style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.4)',letterSpacing:1,marginBottom:6}}>📍 GPS COORDINATES</div>
               <code style={{color:D.teal,fontSize:13,letterSpacing:0.5}}>{coord}</code>
             </div>
-            <a href={mapsUrl} target="_blank" rel="noopener noreferrer" style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,width:'100%',padding:14,borderRadius:12,background:'linear-gradient(135deg,#1d4ed8,#7c3aed)',color:'#fff',textDecoration:'none',fontWeight:700,fontSize:14,fontFamily:D.font,minHeight:48}}>🗺️ Open in Google Maps</a>
+            <a href={mapsUrl} target="_blank" rel="noopener noreferrer" style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,width:'100%',padding:14,borderRadius:12,background:'linear-gradient(135deg,#1d4ed8,#7c3aed)',color:'#fff',textDecoration:'none',fontWeight:700,fontSize:14,fontFamily:D.font,minHeight:48,marginBottom:14}}>🗺️ Open in Google Maps</a>
+            <div style={{background:D.glass,border:`1px solid ${D.border}`,borderRadius:12,padding:'14px 16px'}}>
+              <div style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.4)',letterSpacing:1,marginBottom:10}}>📱 SHARE THIS HIDDEN PLACE</div>
+              {[
+                {id:'instagram',icon:'📸',label:'Instagram',color:'#fd1d1d',href:`https://www.instagram.com/create/story`,caption:`Found this hidden gem! 🗺️ ${place.name}\n${place.description}\nDiscovered on @hiddenroutes app\n#hiddenroutes #hiddengems #hiddenplaces #offthebeatenpath`},
+                {id:'tiktok',icon:'🎵',label:'TikTok',color:'#fe2c55',href:`https://www.tiktok.com`,caption:`#hiddenroutes #hiddengem #${(place.name||'').toLowerCase().replace(/\s+/g,'')} #offthebeatenpath #hiddenplaces`},
+                {id:'snapchat',icon:'👻',label:'Snapchat',color:'#FFFC00',href:`https://snapchat.com`},
+              ].map(s=>(
+                <button key={s.id} onClick={()=>{if(s.caption)navigator.clipboard.writeText(s.caption);window.open(s.href,'_blank');}}
+                  style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'9px 12px',borderRadius:9,background:s.color+'12',border:`1px solid ${s.color}33`,color:'#fff',cursor:'pointer',marginBottom:6,fontFamily:D.font,fontSize:13}}>
+                  <span>{s.icon}</span><span style={{flex:1,textAlign:'left'}}>Share on {s.label}</span><span style={{fontSize:10,color:'rgba(255,255,255,0.35)'}}>Caption copied →</span>
+                </button>
+              ))}
+            </div>
           </div>}
           {tab==='tips'&&<div style={{animation:'fadeIn 0.25s ease'}}>
             <div style={{background:D.goldDim,border:`1px solid ${D.gold}44`,borderRadius:12,padding:'14px 16px'}}>
@@ -454,17 +475,22 @@ function redditPin(L, score = 0) {
 function verifiedPin(L) {
   return L.divIcon({ className:'', html:`<div style="width:26px;height:26px;border-radius:50%;background:#8B5CF6;border:2px solid #fff;box-shadow:0 0 12px #8B5CF699;display:flex;align-items:center;justify-content:center;font-size:12px;">📍</div>`, iconSize:[26,26], iconAnchor:[13,13] });
 }
+function socialPin(L, platform='instagram') {
+  const cfg = { instagram:{icon:'📸',bg:'#fd1d1d'}, tiktok:{icon:'🎵',bg:'#010101'}, snapchat:{icon:'👻',bg:'#FFFC00'} };
+  const { icon, bg } = cfg[platform] || cfg.instagram;
+  return L.divIcon({ className:'', html:`<div style="width:26px;height:26px;border-radius:50%;background:${bg};border:2px solid #fff;box-shadow:0 0 10px ${bg}99;display:flex;align-items:center;justify-content:center;font-size:12px;">${icon}</div>`, iconSize:[26,26], iconAnchor:[13,13] });
+}
 
 function MapExplore({ state, onModal, userLocation }) {
   const mobile=useMobile();
   const mapRef=useRef(null), mapDivRef=useRef(null), markersRef=useRef([]);
-  const communityMarkersRef=useRef([]), redditMarkersRef=useRef([]), verifiedMarkersRef=useRef([]);
+  const communityMarkersRef=useRef([]), redditMarkersRef=useRef([]), verifiedMarkersRef=useRef([]), socialMarkersRef=useRef([]);
   const [places,setPlaces]=useState([]);
   const [loading,setLoading]=useState(true);
   const [loadedCount,setLoadedCount]=useState(0);
   const [error,setError]=useState(null);
   const [search,setSearch]=useState(''), [cat,setCat]=useState('All');
-  const [source,setSource]=useState('all'); // all | ai | community | reddit | verified
+  const [source,setSource]=useState('all'); // all | ai | community | reddit | verified | social
   const [drawerOpen,setDrawerOpen]=useState(false);
   const touchY=useRef(0);
   const total=state.regions.length;
@@ -512,6 +538,26 @@ function MapExplore({ state, onModal, userLocation }) {
         });
       } catch {}
     };
+    const addSocialMarkers=async(L)=>{
+      try {
+        const places = await getApprovedSocialPlacesForState(state.name);
+        places.forEach(p=>{
+          if(!p.coordinates?.lat||!p.coordinates?.lng) return;
+          const plat=p.platform||'instagram';
+          const platLabel={instagram:'📸 Instagram',tiktok:'🎵 TikTok',snapchat:'👻 Snapchat'}[plat]||plat;
+          const mk=L.marker([p.coordinates.lat,p.coordinates.lng],{icon:socialPin(L,plat)}).addTo(map);
+          mk.bindTooltip(`${platLabel} · ${p.name||'Hidden Place'} · by ${p.username||'@explorer'}`,{direction:'top',offset:[0,-14]});
+          mk.on('click',()=>onModal({
+            name:p.name||'Hidden Place', lat:p.coordinates.lat, lng:p.coordinates.lng,
+            category:p.category||'hidden', description:p.description||'',
+            localTip:p.whyHidden||`Shared by ${p.username} on ${platLabel}`,
+            rating:p.score>=70?4.8:4.2, isSocial:true, platform:plat,
+            username:p.username, postUrl:p.postUrl, score:p.score||0,
+          }, state.name));
+          socialMarkersRef.current.push(mk);
+        });
+      } catch {}
+    };
     const addRedditMarkers=async(L)=>{
       try {
         const rdPlaces = await getApprovedRedditPlacesForState(state.name);
@@ -546,10 +592,10 @@ function MapExplore({ state, onModal, userLocation }) {
       try { await fetchAllRegionsParallel(state, onBatch); if(!cancel){ setLoading(false); } }
       catch(e) { if(!cancel){ setError(e.message); setLoading(false); } }
       preloadNeighbors(state);
-      if(!cancel) { addCommunityMarkers(L); addRedditMarkers(L); addVerifiedMarkers(L); }
+      if(!cancel) { addCommunityMarkers(L); addRedditMarkers(L); addVerifiedMarkers(L); addSocialMarkers(L); }
     };
     init().catch(e=>{ if(!cancel){setError(e.message);setLoading(false);} });
-    return()=>{ cancel=true; markersRef.current=[]; communityMarkersRef.current=[]; redditMarkersRef.current=[]; verifiedMarkersRef.current=[]; if(map)map.remove(); mapRef.current=null; };
+    return()=>{ cancel=true; markersRef.current=[]; communityMarkersRef.current=[]; redditMarkersRef.current=[]; verifiedMarkersRef.current=[]; socialMarkersRef.current=[]; if(map)map.remove(); mapRef.current=null; };
   },[state]);
 
   useEffect(()=>{
@@ -557,10 +603,12 @@ function MapExplore({ state, onModal, userLocation }) {
     const showComm = source==='all'||source==='community';
     const showReddit = source==='all'||source==='reddit';
     const showVerified = source==='all'||source==='verified';
+    const showSocial   = source==='all'||source==='social';
     markersRef.current.forEach(({marker,place:p})=>{ const catOk=(cat==='All'||p.category===cat); const searchOk=p.name.toLowerCase().includes(search.toLowerCase()); marker.setOpacity(showAI&&catOk&&searchOk?1:0.08); });
     communityMarkersRef.current.forEach(mk=>mk.setOpacity(showComm?1:0.08));
     redditMarkersRef.current.forEach(mk=>mk.setOpacity(showReddit?1:0.08));
     verifiedMarkersRef.current.forEach(mk=>mk.setOpacity(showVerified?1:0.08));
+    socialMarkersRef.current.forEach(mk=>mk.setOpacity(showSocial?1:0.08));
   },[cat,search,source]);
 
   const progress=total>0?loadedCount/total:0;
@@ -584,7 +632,7 @@ function MapExplore({ state, onModal, userLocation }) {
         {CATEGORIES.map(c=>{const a=cat===c;const col=c==='All'?D.teal:CAT_COLOR[c];return(<button key={c} onClick={()=>setCat(c)} style={{padding:'5px 10px',borderRadius:20,fontSize:10,fontWeight:700,cursor:'pointer',background:a?col:'rgba(255,255,255,0.06)',border:`1px solid ${a?col:D.border}`,color:a?'#fff':D.muted,minHeight:44,fontFamily:D.font,transition:'all 0.15s'}}>{c==='All'?'🗺️':CAT_EMOJI[c]} {c}</button>);})}
       </div>
       <div style={{padding:'6px 14px',borderBottom:`1px solid ${D.border}`,display:'flex',gap:5,flexShrink:0}}>
-        {[['all','🗺️ All','#64748b'],['ai','🤖 AI','#00D2FF'],['community','🌟 Community','#C9A84C'],['reddit','🔴 Reddit','#F97316'],['verified','📍 Verified','#8B5CF6']].map(([id,label,col])=>{const a=source===id;return(<button key={id} onClick={()=>setSource(id)} style={{padding:'4px 9px',borderRadius:16,fontSize:10,fontWeight:a?700:500,cursor:'pointer',background:a?col+'22':'transparent',border:`1px solid ${a?col:D.border}`,color:a?col:D.muted,fontFamily:D.font,transition:'all 0.15s'}}>{label}</button>);})}
+        {[['all','🗺️ All','#64748b'],['ai','🤖 AI','#00D2FF'],['community','🌟 Community','#C9A84C'],['reddit','🔴 Reddit','#F97316'],['verified','📍 Verified','#8B5CF6'],['social','📸 Social','#fd1d1d']].map(([id,label,col])=>{const a=source===id;return(<button key={id} onClick={()=>setSource(id)} style={{padding:'4px 9px',borderRadius:16,fontSize:10,fontWeight:a?700:500,cursor:'pointer',background:a?col+'22':'transparent',border:`1px solid ${a?col:D.border}`,color:a?col:D.muted,fontFamily:D.font,transition:'all 0.15s'}}>{label}</button>);})}
       </div>
       <div style={{flex:1,overflowY:'auto',padding:'6px 14px'}}>
         {showSkeleton&&Array.from({length:6}).map((_,i)=><SkeletonCard key={i}/>)}

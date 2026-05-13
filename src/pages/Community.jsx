@@ -12,6 +12,7 @@ import {
   getSubmissions, voteOnSubmission, getReviews,
   addReview, getLeaderboard, getLevelInfo, markReviewHelpful,
 } from '../lib/community';
+import { getSocialLeaderboard } from '../lib/social';
 
 const D = {
   navy: '#0A0F1E', teal: '#00D2FF', gold: '#C9A84C',
@@ -219,13 +220,23 @@ function ApprovedCard({ sub, userId, onReviewSubmit }) {
   );
 }
 
+const SOCIAL_P = {
+  instagram: { icon: '📸', color: '#fd1d1d' },
+  tiktok:    { icon: '🎵', color: '#fe2c55' },
+  snapchat:  { icon: '👻', color: '#FFFC00' },
+};
+
 // ─── Leaderboard ──────────────────────────────────────────────────────────────
 function LeaderboardTab() {
-  const [leaders, setLeaders] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const [leaders, setLeaders]           = useState([]);
+  const [socialLeaders, setSocialLeaders] = useState([]);
+  const [loading, setLoading]           = useState(true);
 
   useEffect(() => {
-    getLeaderboard(20).then(l => { setLeaders(l); setLoading(false); });
+    Promise.all([getLeaderboard(20), getSocialLeaderboard(5)]).then(([l, sl]) => {
+      setLeaders(l); setSocialLeaders(sl); setLoading(false);
+    });
   }, []);
 
   if (loading) return <div style={{ textAlign: 'center', color: D.muted, padding: 40 }}>Loading leaderboard…</div>;
@@ -258,6 +269,36 @@ function LeaderboardTab() {
           </div>
         );
       })}
+
+      {/* Social Explorers */}
+      {socialLeaders.length > 0 && (
+        <div style={{ marginTop: 32 }}>
+          <div style={{ textAlign: 'center', marginBottom: 16 }}>
+            <div style={{ fontFamily: D.serif, fontSize: 20, color: D.white, fontWeight: 900 }}>📸 Top Social Explorers</div>
+            <div style={{ color: D.muted, fontSize: 13 }}>Most places shared with #hiddenroutes</div>
+          </div>
+          {socialLeaders.map((l, i) => (
+            <div key={l.username} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 16px', borderRadius: 12, marginBottom: 8, background: 'rgba(131,58,180,0.06)', border: '1px solid rgba(131,58,180,0.2)' }}>
+              <div style={{ fontSize: i < 3 ? 20 : 14, minWidth: 28, textAlign: 'center' }}>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</div>
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg,#833ab4,#fd1d1d)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>📸</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: D.white, fontWeight: 600, fontSize: 13 }}>{l.username}</div>
+                <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
+                  {l.platforms.map(p => <span key={p} title={p} style={{ fontSize: 14 }}>{SOCIAL_P[p]?.icon}</span>)}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ color: '#c084fc', fontWeight: 700, fontSize: 14 }}>{l.count} places</div>
+              </div>
+            </div>
+          ))}
+          <div style={{ textAlign: 'center', marginTop: 12 }}>
+            <button onClick={() => navigate('/discover/social')} style={{ padding: '8px 18px', borderRadius: 9, border: '1px solid rgba(131,58,180,0.35)', background: 'rgba(131,58,180,0.08)', color: '#c084fc', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: D.font }}>
+              View #hiddenroutes Hub →
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

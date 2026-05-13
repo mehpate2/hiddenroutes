@@ -14,6 +14,9 @@ import SubmitPlace from './pages/SubmitPlace';
 import UserProfile from './pages/UserProfile';
 import AdminImport from './pages/AdminImport';
 import AdminVerified from './pages/AdminVerified';
+import SocialConnect from './pages/SocialConnect';
+import SocialSubmit from './pages/SocialSubmit';
+import SocialHub from './pages/SocialHub';
 import ProtectedRoute from './components/ProtectedRoute';
 import Toast from './components/Toast';
 
@@ -48,6 +51,9 @@ export default function App() {
         <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
         <Route path="/admin/import" element={<ProtectedRoute><AdminImport /></ProtectedRoute>} />
         <Route path="/admin/verified" element={<ProtectedRoute><AdminVerified /></ProtectedRoute>} />
+        <Route path="/settings/social" element={<ProtectedRoute><SocialConnect /></ProtectedRoute>} />
+        <Route path="/submit/social" element={<ProtectedRoute><SocialSubmit /></ProtectedRoute>} />
+        <Route path="/discover/social" element={<SocialHub />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {toast && <Toast msg={toast.msg} type={toast.type} key={toast.id} />}

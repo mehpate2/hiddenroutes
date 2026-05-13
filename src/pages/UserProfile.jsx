@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getUserStats, getUserSubmissions, getLevelInfo } from '../lib/community';
+import { getSocialAccounts } from '../lib/social';
 
 const D = {
   navy: '#0A0F1E', teal: '#00D2FF', gold: '#C9A84C',
@@ -123,20 +124,23 @@ export default function UserProfile() {
   const { user, userPoints, levelInfo } = useAuth();
   const navigate = useNavigate();
 
-  const [stats, setStats]   = useState(null);
-  const [subs, setSubs]     = useState([]);
-  const [tab, setTab]       = useState('overview');
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats]       = useState(null);
+  const [subs, setSubs]         = useState([]);
+  const [socialAccts, setSocial] = useState({});
+  const [tab, setTab]           = useState('overview');
+  const [loading, setLoading]   = useState(true);
 
   useEffect(() => {
     if (!user) { navigate('/login'); return; }
     (async () => {
-      const [s, submissions] = await Promise.all([
+      const [s, submissions, social] = await Promise.all([
         getUserStats(user.uid),
         getUserSubmissions(user.uid),
+        getSocialAccounts(user.uid),
       ]);
       setStats(s);
       setSubs(submissions);
+      setSocial(social);
       setLoading(false);
     })();
   }, [user]);
@@ -188,10 +192,10 @@ export default function UserProfile() {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: `1px solid ${D.border}`, paddingBottom: 12 }}>
-          {['overview', 'submissions', 'badges'].map(t => (
+          {['overview', 'submissions', 'badges', 'social'].map(t => (
             <button key={t} onClick={() => setTab(t)}
               style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: tab === t ? `${D.teal}18` : 'transparent', color: tab === t ? D.teal : D.muted, fontSize: 13, fontWeight: tab === t ? 700 : 400, cursor: 'pointer', fontFamily: D.font, textTransform: 'capitalize' }}>
-              {t === 'overview' ? '📊 Overview' : t === 'submissions' ? '📍 My Places' : '🏅 Badges'}
+              {t === 'overview' ? '📊 Overview' : t === 'submissions' ? '📍 My Places' : t === 'badges' ? '🏅 Badges' : '📸 Social'}
             </button>
           ))}
         </div>
@@ -217,6 +221,51 @@ export default function UserProfile() {
 
         {tab === 'submissions' && <SubmissionList submissions={subs} />}
         {tab === 'badges' && <BadgeGrid userBadges={stats?.badges || []} />}
+        {tab === 'social' && (
+          <div>
+            {/* Connected platforms */}
+            <div style={{ color: D.white, fontWeight: 700, fontSize: 15, marginBottom: 12, fontFamily: D.serif }}>Connected Platforms</div>
+            {['instagram','tiktok','snapchat'].map(p => {
+              const acct = socialAccts[p];
+              const cfg = { instagram:{icon:'📸',name:'Instagram',gradient:'linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)'}, tiktok:{icon:'🎵',name:'TikTok',gradient:'linear-gradient(135deg,#010101,#fe2c55)'}, snapchat:{icon:'👻',name:'Snapchat',gradient:'linear-gradient(135deg,#FFFC00,#FFE600)'} }[p];
+              return (
+                <div key={p} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:12, marginBottom:8, background:acct?.connected?'rgba(34,197,94,0.05)':'rgba(255,255,255,0.03)', border:`1px solid ${acct?.connected?'rgba(34,197,94,0.2)':D.border}` }}>
+                  <div style={{ width:38, height:38, borderRadius:10, background:cfg.gradient, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18 }}>{cfg.icon}</div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ color:D.white, fontWeight:600, fontSize:14 }}>{cfg.name}</div>
+                    <div style={{ color:acct?.connected?D.success:D.muted, fontSize:12 }}>{acct?.connected?`${acct.username} · ${acct.postsImported||0} imported`:'Not connected'}</div>
+                  </div>
+                  {acct?.connected && <span style={{ fontSize:18 }}>✅</span>}
+                </div>
+              );
+            })}
+            {/* Social badges */}
+            <div style={{ color: D.white, fontWeight: 700, fontSize: 15, marginBottom: 12, marginTop: 24, fontFamily: D.serif }}>Social Badges</div>
+            {(() => {
+              const connectedCount = Object.values(socialAccts).filter(a => a?.connected).length;
+              const badges = [
+                { id:'social_explorer', icon:'🌐', name:'Social Explorer', desc:'Connected 2+ platforms', earned: connectedCount >= 2 },
+                { id:'content_creator', icon:'🎬', name:'Content Creator',  desc:'5+ posts imported to map', earned: Object.values(socialAccts).reduce((s,a)=>s+(a?.postsImported||0),0) >= 5 },
+              ];
+              return (
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:10 }}>
+                  {badges.map(b => (
+                    <div key={b.id} style={{ padding:'14px 12px', borderRadius:12, background:b.earned?'rgba(255,255,255,0.06)':'rgba(255,255,255,0.02)', border:`1px solid ${b.earned?D.gold+'44':D.border}`, textAlign:'center', opacity:b.earned?1:0.4 }}>
+                      <div style={{ fontSize:30, marginBottom:4 }}>{b.icon}</div>
+                      <div style={{ color:b.earned?D.gold:D.muted, fontWeight:700, fontSize:12 }}>{b.name}</div>
+                      <div style={{ color:D.muted, fontSize:11, marginTop:2 }}>{b.desc}</div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+            <div style={{ marginTop:20 }}>
+              <button onClick={() => navigate('/settings/social')} style={{ padding:'10px 22px', borderRadius:10, border:'none', background:'linear-gradient(135deg,#833ab4,#fd1d1d)', color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:D.font }}>
+                Manage Social Accounts →
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
