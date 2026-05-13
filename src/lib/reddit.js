@@ -66,11 +66,13 @@ export async function getRedditPlaces({ status, stateFilter, conf } = {}) {
   if (status)      constraints.push(where('status',     '==', status));
   if (stateFilter) constraints.push(where('state',      '==', stateFilter));
   if (conf)        constraints.push(where('confidence', '==', conf));
-  constraints.push(orderBy('upvotes', 'desc'));
+  constraints.push(limit(50));
 
   const q = query(collection(db, 'reddit_places'), ...constraints);
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0));
 }
 
 export async function getApprovedRedditPlacesForState(stateName) {
@@ -152,6 +154,74 @@ export async function getRedditDiscoverStats() {
     newest,
     topSubreddit: top ? { name: top[0], count: top[1] } : null,
   };
+}
+
+// ─── Pipeline save (with score + dedup) ──────────────────────────────────────
+export async function savePipelineResult(place) {
+  try {
+    // Name+state dedup
+    const nameQ = query(collection(db, 'reddit_places'), where('name', '==', place.name), where('state', '==', place.state), limit(1));
+    const nameSnap = await getDocs(nameQ);
+    if (!nameSnap.empty) return null;
+
+    const docRef = await addDoc(collection(db, 'reddit_places'), {
+      name:           place.name         || '',
+      description:    place.description  || '',
+      state:          place.state        || '',
+      city:           place.city         || '',
+      coordinates:    place.coordinates  || null,
+      coordSource:    place.coordSource  || 'none',
+      category:       place.category     || 'nature',
+      why_hidden:     place.why_hidden   || '',
+      local_tip:      place.local_tip    || '',
+      confidence:     place.confidence   || 'medium',
+      source_url:     place.source_url   || '',
+      upvotes:        place.upvotes      || 0,
+      commentCount:   place.commentCount || 0,
+      subreddit:      place.subreddit    || '',
+      score:          place.score        || 0,
+      scoreBreakdown: place.scoreBreakdown || {},
+      hiddenness:     place.hiddenness   || 0,
+      beenThereCount: place.beenThereCount || 0,
+      photosFound:    place.photosFound  || 0,
+      photos:         place.photos       || [],
+      verdict:        place.verdict      || 'pending',
+      status:         place.verdict === 'auto_approved' ? 'approved' : place.verdict === 'auto_rejected' ? 'rejected' : 'pending',
+      importedAt:     serverTimestamp(),
+      approvedAt:     place.verdict === 'auto_approved' ? serverTimestamp() : null,
+      addedToMap:     place.verdict === 'auto_approved',
+      pipelineRun:    true,
+    });
+    return docRef.id;
+  } catch (err) {
+    console.warn('[pipeline] save failed:', err.message);
+    return null;
+  }
+}
+
+export async function getPipelineStats() {
+  const snap = await getDocs(collection(db, 'reddit_places'));
+  const docs = snap.docs.map(d => d.data());
+  return {
+    total:         docs.length,
+    pending:       docs.filter(d => d.status === 'pending').length,
+    approved:      docs.filter(d => d.status === 'approved').length,
+    rejected:      docs.filter(d => d.status === 'rejected').length,
+    autoApproved:  docs.filter(d => d.verdict === 'auto_approved').length,
+    highConfidence: docs.filter(d => d.confidence === 'high' && d.status === 'pending').length,
+    avgScore:      docs.length ? Math.round(docs.reduce((s, d) => s + (d.score || 0), 0) / docs.length) : 0,
+  };
+}
+
+export async function getLastPipelineRun() {
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'redditPipeline'));
+    return snap.exists() ? snap.data() : null;
+  } catch { return null; }
+}
+
+export async function saveLastPipelineRun(data) {
+  await setDoc(doc(db, 'settings', 'redditPipeline'), { ...data, updatedAt: serverTimestamp() }, { merge: true });
 }
 
 // ─── Auto-import settings ─────────────────────────────────────────────────────

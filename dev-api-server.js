@@ -11,6 +11,253 @@ const anthropic = new Anthropic({ apiKey: anthropicKey });
 
 const RETRY_DELAYS = [2000, 4000, 8000];
 
+// ─── Pipeline helpers ────────────────────────────────────────────────────────
+
+function scoreUpvotes(upvotes) {
+  if (upvotes >= 5000) return 30;
+  if (upvotes >= 1000) return 25;
+  if (upvotes >= 500)  return 20;
+  if (upvotes >= 200)  return 15;
+  if (upvotes >= 100)  return 10;
+  if (upvotes >= 50)   return 5;
+  return 2;
+}
+
+function scoreEngagement(commentCount) {
+  if (commentCount >= 200) return 20;
+  if (commentCount >= 100) return 16;
+  if (commentCount >= 50)  return 12;
+  if (commentCount >= 20)  return 8;
+  if (commentCount >= 10)  return 4;
+  return 1;
+}
+
+function extractCoordsFromText(text) {
+  if (!text) return null;
+  const dec = text.match(/(-?\d{2,3}\.\d{3,})\s*[,;]\s*(-?\d{2,3}\.\d{3,})/);
+  if (dec) {
+    const lat = parseFloat(dec[1]), lng = parseFloat(dec[2]);
+    if (lat >= 18 && lat <= 72 && lng >= -180 && lng <= -65) return { lat, lng, source: 'gps_regex' };
+    if (lng >= 18 && lng <= 72 && lat >= -180 && lat <= -65) return { lat: lng, lng: lat, source: 'gps_regex' };
+  }
+  const gm = text.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (gm) {
+    const lat = parseFloat(gm[1]), lng = parseFloat(gm[2]);
+    if (lat >= 18 && lat <= 72 && lng >= -180 && lng <= -65) return { lat, lng, source: 'google_maps_url' };
+  }
+  const gm2 = text.match(/[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (gm2) return { lat: parseFloat(gm2[1]), lng: parseFloat(gm2[2]), source: 'google_maps_url' };
+  return null;
+}
+
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function geocodePlace(name, state) {
+  try {
+    const q = encodeURIComponent(`${name}, ${state}, USA`);
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}&countrycodes=us&limit=1`, {
+      headers: { 'User-Agent': 'HiddenRoutes/1.0 (travel discovery app)', 'Accept': 'application/json' },
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (d.length > 0) return { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon), source: 'nominatim' };
+    return null;
+  } catch { return null; }
+}
+
+const REDDIT_HEADERS = { 'User-Agent': 'HiddenRoutes/1.0 (travel discovery app)', 'Accept': 'application/json' };
+
+async function fetchWithRetry(url, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    const r = await fetch(url, { headers: REDDIT_HEADERS });
+    if (r.status !== 429) return r;
+    const wait = (i + 1) * 5000;
+    console.log(`[Reddit] 429 rate limit — waiting ${wait / 1000}s (attempt ${i + 1}/${retries})`);
+    await new Promise(res => setTimeout(res, wait));
+  }
+  throw new Error('Reddit rate limit exceeded — try again in a few minutes');
+}
+
+async function fetchPostComments(subreddit, postId) {
+  try {
+    const r = await fetchWithRetry(`https://www.reddit.com/r/${subreddit}/comments/${postId}.json?limit=50&sort=top`);
+    if (!r.ok) return [];
+    const d = await r.json();
+    return (d[1]?.data?.children || [])
+      .filter(c => c.kind === 't1' && c.data.score > 0)
+      .map(c => ({ body: c.data.body || '', score: c.data.score || 0 }))
+      .slice(0, 30);
+  } catch { return []; }
+}
+
+function harvestPhotos(post, comments) {
+  const allText = [post.postUrl || '', post.body || '', ...comments.map(c => c.body)].join(' ');
+  const redditImgs = allText.match(/https?:\/\/i\.redd\.it\/[^\s)"'\]]+/g) || [];
+  const imgurImgs  = allText.match(/https?:\/\/i\.imgur\.com\/[^\s)"'\]]+\.(?:jpg|jpeg|png|gif)/gi) || [];
+  return [...new Set([...redditImgs, ...imgurImgs])].slice(0, 5);
+}
+
+function analyzeCommunitySignals(post, comments) {
+  const allText = (post.title + ' ' + post.body + ' ' + comments.map(c => c.body).join(' ')).toLowerCase();
+  const beenThereHits = ['been here','been there','visited this','went here','hiked this',"i've been",'can confirm','confirmed','this is real'].filter(p => allText.includes(p)).length;
+  const warnHits      = ['closed','private property','trespassing','no longer','burned down','demolished','dangerous','unsafe','off limits'].filter(p => allText.includes(p)).length;
+  const coords  = extractCoordsFromText(post.title + ' ' + post.body + ' ' + comments.map(c => c.body).join(' '));
+  const photos  = harvestPhotos(post, comments);
+
+  let communityScore = 0;
+  if (beenThereHits >= 2) communityScore += 10; else if (beenThereHits >= 1) communityScore += 5;
+  if (coords)             communityScore += 5;
+  if (photos.length >= 2) communityScore += 5; else if (photos.length >= 1) communityScore += 2;
+  if (warnHits >= 2)      communityScore = Math.max(0, communityScore - 10);
+  else if (warnHits >= 1) communityScore = Math.max(0, communityScore - 5);
+
+  return { beenThere: beenThereHits, warnings: warnHits, coords, photos, communityScore };
+}
+
+async function analyzeWithAI(post, comments, anthropicClient) {
+  const commentSummary = comments.slice(0, 10).map(c => c.body.slice(0, 200)).join('\n---\n');
+  const msg = await anthropicWithRetry({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 600,
+    messages: [{
+      role: 'user',
+      content: `Analyze this Reddit post for a travel app that surfaces hidden, lesser-known US places.
+
+POST: ${post.title}
+BODY: ${(post.body || '').slice(0, 500)}
+COMMENTS:
+${commentSummary.slice(0, 700)}
+
+Return ONLY valid JSON:
+{"isSpecificPlace":bool,"isHiddenGem":bool,"isUS":bool,"name":"str or null","state":"full US state or null","city":"nearest city or null","category":"waterfall|cave|viewpoint|beach|trail|forest|lake|nature|history","hiddenness":1-10,"description":"2 sentences or null","localTip":"1 sentence or null","whyHidden":"1 sentence or null","aiScore":0-30,"approxLat":number or null,"approxLng":number or null}`,
+    }],
+  });
+  const match = msg.content[0].text.match(/\{[\s\S]*\}/);
+  return match ? JSON.parse(match[0]) : null;
+}
+
+function buildFinalScore(post, communityData, aiResult) {
+  const upvoteScore     = scoreUpvotes(post.upvotes || 0);
+  const engagementScore = scoreEngagement(post.commentCount || 0);
+  const communityScore  = communityData.communityScore || 0;
+  const aiScore         = aiResult?.aiScore || 0;
+  return {
+    total: Math.min(100, upvoteScore + engagementScore + communityScore + aiScore),
+    breakdown: { upvotes: upvoteScore, engagement: engagementScore, community: communityScore, ai: aiScore },
+  };
+}
+
+async function runPipeline(subreddit, limit, sendEvent, anthropicClient) {
+  sendEvent('status', { message: `Fetching posts from r/${subreddit}…`, phase: 'fetch' });
+
+  const rdRes = await fetchWithRetry(`https://www.reddit.com/r/${subreddit}/top.json?limit=${limit}&t=all`);
+  if (!rdRes.ok) throw new Error(`Reddit ${rdRes.status}: ${rdRes.statusText}`);
+  const rdJson   = await rdRes.json();
+  const allPosts = (rdJson?.data?.children || []).map(c => ({
+    id:           c.data.id,
+    title:        c.data.title    || '',
+    body:         c.data.selftext || '',
+    url:          `https://reddit.com${c.data.permalink}`,
+    postUrl:      c.data.url      || '',
+    upvotes:      c.data.score    || 0,
+    commentCount: c.data.num_comments || 0,
+  }));
+
+  const filtered = allPosts.filter(p => p.upvotes >= 50 && (p.title.length + p.body.length) > 20);
+  sendEvent('status', { message: `${filtered.length} qualifying posts. Running AI analysis…`, phase: 'analyze', total: filtered.length });
+
+  const BATCH = 5;
+  const seenCoords = [];
+  const summary = { autoApproved: 0, pendingReview: 0, autoRejected: 0, skipped: 0 };
+
+  for (let i = 0; i < filtered.length; i += BATCH) {
+    const batch = filtered.slice(i, i + BATCH);
+
+    const batchResults = await Promise.all(batch.map(async (post) => {
+      try {
+        const comments  = await fetchPostComments(subreddit, post.id);
+        const community = analyzeCommunitySignals(post, comments);
+        const aiResult  = await analyzeWithAI(post, comments, anthropicClient);
+
+        if (!aiResult?.isSpecificPlace || !aiResult?.isUS || !aiResult?.isHiddenGem || !aiResult?.name) {
+          return { verdict: 'skip', reason: 'not a specific hidden US place' };
+        }
+        if ((aiResult.hiddenness || 0) < 4) {
+          return { verdict: 'skip', reason: `hiddenness ${aiResult.hiddenness}/10 too low` };
+        }
+
+        const score = buildFinalScore(post, community, aiResult);
+
+        let coords = community.coords;
+        if (!coords && aiResult.approxLat && aiResult.approxLng) {
+          coords = { lat: aiResult.approxLat, lng: aiResult.approxLng, source: 'ai' };
+        }
+        if (!coords && aiResult.name && aiResult.state) {
+          coords = await geocodePlace(aiResult.name, aiResult.state);
+        }
+
+        if (coords) {
+          const isDupe = seenCoords.some(sc => haversineKm(sc.lat, sc.lng, coords.lat, coords.lng) < 1.0);
+          if (isDupe) return { verdict: 'skip', reason: 'duplicate location' };
+          seenCoords.push(coords);
+        }
+
+        const verdict = score.total >= 70 ? 'auto_approved' : score.total >= 30 ? 'pending' : 'auto_rejected';
+
+        return {
+          verdict,
+          place: {
+            name:           aiResult.name,
+            description:    aiResult.description || '',
+            state:          aiResult.state        || '',
+            city:           aiResult.city         || '',
+            coordinates:    coords ? { lat: coords.lat, lng: coords.lng } : null,
+            coordSource:    coords?.source || 'none',
+            category:       aiResult.category     || 'nature',
+            why_hidden:     aiResult.whyHidden     || '',
+            local_tip:      aiResult.localTip      || '',
+            confidence:     score.total >= 70 ? 'high' : score.total >= 50 ? 'medium' : 'low',
+            source_url:     post.url,
+            upvotes:        post.upvotes,
+            commentCount:   post.commentCount,
+            subreddit,
+            score:          score.total,
+            scoreBreakdown: score.breakdown,
+            hiddenness:     aiResult.hiddenness || 0,
+            beenThereCount: community.beenThere,
+            photosFound:    community.photos.length,
+            photos:         community.photos,
+            verdict,
+          },
+          score,
+        };
+      } catch (err) {
+        return { verdict: 'skip', reason: err.message };
+      }
+    }));
+
+    for (const result of batchResults) {
+      if (result.verdict === 'skip') { summary.skipped++;       continue; }
+      if (result.verdict === 'auto_rejected') { summary.autoRejected++; continue; }
+      if (result.verdict === 'auto_approved') summary.autoApproved++;
+      else summary.pendingReview++;
+      sendEvent('place', { place: result.place, score: result.score });
+    }
+
+    sendEvent('progress', { processed: Math.min(i + BATCH, filtered.length), total: filtered.length, summary });
+
+    if (i + BATCH < filtered.length) await new Promise(r => setTimeout(r, 2000));
+  }
+
+  sendEvent('done', { summary, totalPosts: filtered.length });
+}
+
 async function anthropicWithRetry(params) {
   for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
     try { return await anthropic.messages.create(params); }
@@ -27,8 +274,9 @@ async function anthropicWithRetry(params) {
 
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Content-Security-Policy', "script-src 'self' 'unsafe-eval' 'unsafe-inline';");
 
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
 
@@ -177,6 +425,80 @@ const server = http.createServer(async (req, res) => {
     });
     return;
   }
+
+  // /api/reddit  — Reddit proxy (GET only, exact path match to avoid collisions)
+  {
+    const parsedUrl = new URL(req.url, `http://localhost:${PORT}`);
+    if (parsedUrl.pathname === '/api/reddit' && req.method === 'GET') {
+      const subreddit = parsedUrl.searchParams.get('subreddit');
+      const type      = parsedUrl.searchParams.get('type');
+      const postId    = parsedUrl.searchParams.get('postId');
+
+      console.log('[/api/reddit] hit:', { subreddit, type, postId });
+
+      let rdUrl = '';
+      if (type === 'posts') {
+        rdUrl = `https://www.reddit.com/r/${subreddit}/top.json?limit=100&t=all`;
+      } else if (type === 'comments') {
+        rdUrl = `https://www.reddit.com/r/${subreddit}/comments/${postId}.json?limit=500`;
+      } else {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid type parameter' }));
+        return;
+      }
+
+      try {
+        console.log('[/api/reddit] fetching:', rdUrl);
+        const rdRes = await fetch(rdUrl, {
+          headers: { 'User-Agent': 'HiddenRoutes/1.0 (travel app)', 'Accept': 'application/json' },
+        });
+        console.log('[/api/reddit] Reddit status:', rdRes.status);
+        if (!rdRes.ok) {
+          res.writeHead(rdRes.status, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Reddit returned ${rdRes.status}` }));
+          return;
+        }
+        const data = await rdRes.json();
+        res.setHeader('Cache-Control', 's-maxage=3600');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
+      } catch (err) {
+        console.error('[/api/reddit] error:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+  }
+
+  // /api/reddit-pipeline — SSE pipeline (exact pathname match)
+  {
+    const parsedUrl = new URL(req.url, `http://localhost:${PORT}`);
+    if (parsedUrl.pathname === '/api/reddit-pipeline' && req.method === 'GET') {
+    const subreddit = parsedUrl.searchParams.get('subreddit');
+    const limit     = parseInt(parsedUrl.searchParams.get('limit') || '100', 10);
+
+    console.log('[/api/reddit-pipeline] hit:', { subreddit, limit });
+
+    if (!subreddit) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'subreddit parameter required' })); return; }
+
+    res.writeHead(200, {
+      'Content-Type':                'text/event-stream',
+      'Cache-Control':               'no-cache',
+      'Connection':                  'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    });
+
+    const send = (type, data) => {
+      try { res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`); } catch {}
+    };
+
+    runPipeline(subreddit, limit, send, anthropic)
+      .then(() => res.end())
+      .catch(err => { send('error', { message: err.message }); res.end(); });
+    return;
+    } // end pathname check
+  } // end block scope
 
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Not found' }));

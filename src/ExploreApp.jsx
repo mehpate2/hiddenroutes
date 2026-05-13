@@ -12,6 +12,7 @@ import NavBarAuth from './components/NavBarAuth';
 import UpgradeModal from './components/UpgradeModal';
 import { getDiscoverFeed } from './lib/community';
 import { getApprovedRedditPlacesForState } from './lib/reddit';
+import { getVerifiedPlacesForState } from './lib/verified';
 
 const KEY    = import.meta.env.VITE_ANTHROPIC_API_KEY;
 const HAIKU  = 'claude-haiku-4-5-20251001';
@@ -307,7 +308,7 @@ function PlaceModal({ place, stateName, onClose }) {
   const kw=CAT_KW[place.category]||'travel usa';
   const heroSrc=unsplash(`${place.name} ${stateName||''} ${kw}`, 800, 500);
   const galleryImgs=[1,2,3,4].map(i=>unsplash(`${place.name} ${kw}`, 400, 300, i));
-  const mapsUrl=`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`;
+  const mapsUrl=place.isVerified&&place.address?`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.address)}`:`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`;
   const lat=place.lat??0, lng=place.lng??0;
   const coord=`${Math.abs(lat).toFixed(4)}°${lat>=0?'N':'S'}, ${Math.abs(lng).toFixed(4)}°${lng>=0?'E':'W'}`;
   const saved_=isSaved(place);
@@ -339,14 +340,36 @@ function PlaceModal({ place, stateName, onClose }) {
         </div>
         <div style={{flex:1,overflowY:'auto',padding:20}}>
           {tab==='overview'&&<div style={{animation:'fadeIn 0.25s ease'}}>
-            {place.isReddit&&<div style={{marginBottom:12,padding:'8px 12px',background:'rgba(249,115,22,0.1)',border:'1px solid rgba(249,115,22,0.3)',borderRadius:10,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-              <span style={{fontSize:12,fontWeight:700,color:'#F97316'}}>🔴 Reddit Community Find</span>
-              {place.subreddit&&<span style={{fontSize:11,color:'rgba(249,115,22,0.7)'}}>r/{place.subreddit}</span>}
-              {place.upvotes&&<span style={{fontSize:11,color:'rgba(255,255,255,0.4)'}}>▲ {place.upvotes.toLocaleString()} upvotes</span>}
-              {place.sourceUrl&&<a href={place.sourceUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:'#F97316',textDecoration:'none',marginLeft:'auto'}}>View Post ↗</a>}
+            {place.isReddit&&<div style={{marginBottom:12,padding:'10px 14px',background:'rgba(249,115,22,0.08)',border:'1px solid rgba(249,115,22,0.25)',borderRadius:12}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:place.score?8:0}}>
+                <span style={{fontSize:12,fontWeight:700,color:place.score>=90?'#FFD700':place.score>=70?'#22c55e':'#F97316'}}>
+                  {place.score>=90?'🏆 Legendary':place.score>=70?'⭐ Verified Hidden Gem':'🔴 Reddit Community Find'}
+                </span>
+                {place.subreddit&&<span style={{fontSize:11,color:'rgba(249,115,22,0.7)'}}>r/{place.subreddit}</span>}
+                {place.upvotes&&<span style={{fontSize:11,color:'rgba(255,255,255,0.35)'}}>▲ {place.upvotes.toLocaleString()}</span>}
+                {place.beenThereCount>0&&<span style={{fontSize:11,color:'#22c55e'}}>✓ {place.beenThereCount} confirmed</span>}
+                {place.hiddenness>0&&<span style={{fontSize:11,color:'#a78bfa'}}>🕵️ {place.hiddenness}/10 hidden</span>}
+                {place.sourceUrl&&<a href={place.sourceUrl} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:'#F97316',textDecoration:'none',marginLeft:'auto'}}>View Post ↗</a>}
+              </div>
+              {place.score>0&&<div style={{display:'flex',alignItems:'center',gap:6}}>
+                <div style={{flex:1,height:5,borderRadius:3,background:'rgba(255,255,255,0.08)',overflow:'hidden'}}>
+                  <div style={{height:'100%',width:`${place.score}%`,background:place.score>=90?'#FFD700':place.score>=70?'#22c55e':'#F97316',borderRadius:3,transition:'width 0.6s ease'}}/>
+                </div>
+                <span style={{fontSize:11,fontWeight:700,color:place.score>=90?'#FFD700':place.score>=70?'#22c55e':'#F97316',whiteSpace:'nowrap'}}>{place.score}/100</span>
+              </div>}
             </div>}
             {place.isCommunity&&<div style={{marginBottom:12,padding:'8px 12px',background:'rgba(201,168,76,0.1)',border:'1px solid rgba(201,168,76,0.3)',borderRadius:10,display:'flex',alignItems:'center',gap:8}}>
               <span style={{fontSize:12,fontWeight:700,color:'#C9A84C'}}>🌟 Community Verified Hidden Gem</span>
+            </div>}
+            {place.isVerified&&<div style={{marginBottom:12,padding:'10px 14px',background:'rgba(139,92,246,0.08)',border:'1px solid rgba(139,92,246,0.3)',borderRadius:12}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:place.address?6:0}}>
+                <span style={{fontSize:12,fontWeight:700,color:'#8B5CF6'}}>✓ Personally Verified Location</span>
+                {place.placeType&&<span style={{fontSize:10,color:'rgba(139,92,246,0.7)',border:'1px solid rgba(139,92,246,0.3)',borderRadius:4,padding:'1px 5px'}}>{place.placeType}</span>}
+              </div>
+              {place.address&&<div style={{display:'flex',alignItems:'center',gap:6}}>
+                <span style={{color:'rgba(255,255,255,0.5)',fontSize:11,flex:1,lineHeight:1.4}}>{place.address}</span>
+                <button onClick={()=>navigator.clipboard.writeText(place.address)} style={{background:'rgba(139,92,246,0.15)',border:'1px solid rgba(139,92,246,0.3)',borderRadius:5,color:'#8B5CF6',fontSize:10,padding:'2px 7px',cursor:'pointer',fontFamily:D.font,flexShrink:0}}>Copy</button>
+              </div>}
             </div>}
             <p style={{color:'rgba(255,255,255,0.75)',fontSize:14,lineHeight:1.7,marginBottom:16}}>{place.description}</p>
             {place.whyDetour&&<div style={{background:D.tealDim,border:`1px solid ${D.teal}44`,borderRadius:12,padding:'12px 14px'}}>
@@ -419,20 +442,29 @@ function StateCard({ state, onClick, locked }) {
 function communityPin(L, gold='#C9A84C') {
   return L.divIcon({ className:'', html:`<div style="width:22px;height:22px;border-radius:50%;background:${gold};border:2px solid #fff;box-shadow:0 0 8px ${gold}99;display:flex;align-items:center;justify-content:center;font-size:11px;">🌟</div>`, iconSize:[22,22], iconAnchor:[11,11] });
 }
-function redditPin(L) {
-  return L.divIcon({ className:'', html:`<div style="width:24px;height:24px;border-radius:50%;background:#F97316;border:2px solid #fff;box-shadow:0 0 10px #F9731699;display:flex;align-items:center;justify-content:center;font-size:12px;">🔴</div>`, iconSize:[24,24], iconAnchor:[12,12] });
+function redditPin(L, score = 0) {
+  const isLegendary = score >= 90;
+  const isVerified  = score >= 70;
+  const bg  = isLegendary ? '#FFD700' : isVerified ? '#22c55e' : '#F97316';
+  const glow = isLegendary ? '#FFD70099' : isVerified ? '#22c55e99' : '#F9731699';
+  const icon = isLegendary ? '🏆' : isVerified ? '⭐' : '🔴';
+  const sz   = isLegendary ? 28 : isVerified ? 26 : 24;
+  return L.divIcon({ className:'', html:`<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${bg};border:2px solid #fff;box-shadow:0 0 12px ${glow};display:flex;align-items:center;justify-content:center;font-size:${sz*0.45}px;">${icon}</div>`, iconSize:[sz,sz], iconAnchor:[sz/2,sz/2] });
+}
+function verifiedPin(L) {
+  return L.divIcon({ className:'', html:`<div style="width:26px;height:26px;border-radius:50%;background:#8B5CF6;border:2px solid #fff;box-shadow:0 0 12px #8B5CF699;display:flex;align-items:center;justify-content:center;font-size:12px;">📍</div>`, iconSize:[26,26], iconAnchor:[13,13] });
 }
 
 function MapExplore({ state, onModal, userLocation }) {
   const mobile=useMobile();
   const mapRef=useRef(null), mapDivRef=useRef(null), markersRef=useRef([]);
-  const communityMarkersRef=useRef([]), redditMarkersRef=useRef([]);
+  const communityMarkersRef=useRef([]), redditMarkersRef=useRef([]), verifiedMarkersRef=useRef([]);
   const [places,setPlaces]=useState([]);
   const [loading,setLoading]=useState(true);
   const [loadedCount,setLoadedCount]=useState(0);
   const [error,setError]=useState(null);
   const [search,setSearch]=useState(''), [cat,setCat]=useState('All');
-  const [source,setSource]=useState('all'); // all | ai | community | reddit
+  const [source,setSource]=useState('all'); // all | ai | community | reddit | verified
   const [drawerOpen,setDrawerOpen]=useState(false);
   const touchY=useRef(0);
   const total=state.regions.length;
@@ -462,19 +494,40 @@ function MapExplore({ state, onModal, userLocation }) {
         });
       } catch {}
     };
+    const addVerifiedMarkers=async(L)=>{
+      try {
+        const vPlaces = await getVerifiedPlacesForState(state.name);
+        vPlaces.forEach(p=>{
+          if(!p.coordinates?.lat||!p.coordinates?.lng) return;
+          const mk=L.marker([p.coordinates.lat,p.coordinates.lng],{icon:verifiedPin(L)}).addTo(map);
+          mk.bindTooltip(`📍 ${p.name} · Personally Verified`,{direction:'top',offset:[0,-14]});
+          mk.on('click',()=>onModal({
+            name:p.name, lat:p.coordinates.lat, lng:p.coordinates.lng,
+            category:p.category, description:p.description,
+            localTip:`${p.type} · ${p.address}`,
+            address:p.address, placeType:p.type,
+            rating:5, isVerified:true,
+          }, state.name));
+          verifiedMarkersRef.current.push(mk);
+        });
+      } catch {}
+    };
     const addRedditMarkers=async(L)=>{
       try {
         const rdPlaces = await getApprovedRedditPlacesForState(state.name);
         rdPlaces.forEach(p=>{
           if(!p.coordinates?.lat||!p.coordinates?.lng) return;
-          const mk=L.marker([p.coordinates.lat,p.coordinates.lng],{icon:redditPin(L)}).addTo(map);
-          mk.bindTooltip(`🔴 ${p.name} (Reddit r/${p.subreddit})`,{direction:'top',offset:[0,-14]});
+          const score=p.score||0;
+          const scoreLabel=score>=90?'🏆 Legendary':score>=70?'⭐ Verified':'🔴 Reddit';
+          const mk=L.marker([p.coordinates.lat,p.coordinates.lng],{icon:redditPin(L,score)}).addTo(map);
+          mk.bindTooltip(`${scoreLabel} ${p.name} · ${score} pts · ▲${(p.upvotes||0).toLocaleString()}${p.beenThereCount?` · ✓${p.beenThereCount}`:''}`,{direction:'top',offset:[0,-14]});
           mk.on('click',()=>onModal({
             name:p.name, lat:p.coordinates.lat, lng:p.coordinates.lng,
             category:p.category, description:p.description,
             localTip:p.local_tip||p.why_hidden||'Found by Reddit community',
-            rating:4.0, isReddit:true,
+            rating:Math.min(5,3+(score/100)*2), isReddit:true,
             sourceUrl:p.source_url, upvotes:p.upvotes, subreddit:p.subreddit,
+            score, hiddenness:p.hiddenness, beenThereCount:p.beenThereCount,
           }, state.name));
           redditMarkersRef.current.push(mk);
         });
@@ -493,19 +546,21 @@ function MapExplore({ state, onModal, userLocation }) {
       try { await fetchAllRegionsParallel(state, onBatch); if(!cancel){ setLoading(false); } }
       catch(e) { if(!cancel){ setError(e.message); setLoading(false); } }
       preloadNeighbors(state);
-      if(!cancel) { addCommunityMarkers(L); addRedditMarkers(L); }
+      if(!cancel) { addCommunityMarkers(L); addRedditMarkers(L); addVerifiedMarkers(L); }
     };
     init().catch(e=>{ if(!cancel){setError(e.message);setLoading(false);} });
-    return()=>{ cancel=true; markersRef.current=[]; communityMarkersRef.current=[]; redditMarkersRef.current=[]; if(map)map.remove(); mapRef.current=null; };
+    return()=>{ cancel=true; markersRef.current=[]; communityMarkersRef.current=[]; redditMarkersRef.current=[]; verifiedMarkersRef.current=[]; if(map)map.remove(); mapRef.current=null; };
   },[state]);
 
   useEffect(()=>{
     const showAI = source==='all'||source==='ai';
     const showComm = source==='all'||source==='community';
     const showReddit = source==='all'||source==='reddit';
+    const showVerified = source==='all'||source==='verified';
     markersRef.current.forEach(({marker,place:p})=>{ const catOk=(cat==='All'||p.category===cat); const searchOk=p.name.toLowerCase().includes(search.toLowerCase()); marker.setOpacity(showAI&&catOk&&searchOk?1:0.08); });
     communityMarkersRef.current.forEach(mk=>mk.setOpacity(showComm?1:0.08));
     redditMarkersRef.current.forEach(mk=>mk.setOpacity(showReddit?1:0.08));
+    verifiedMarkersRef.current.forEach(mk=>mk.setOpacity(showVerified?1:0.08));
   },[cat,search,source]);
 
   const progress=total>0?loadedCount/total:0;
@@ -529,7 +584,7 @@ function MapExplore({ state, onModal, userLocation }) {
         {CATEGORIES.map(c=>{const a=cat===c;const col=c==='All'?D.teal:CAT_COLOR[c];return(<button key={c} onClick={()=>setCat(c)} style={{padding:'5px 10px',borderRadius:20,fontSize:10,fontWeight:700,cursor:'pointer',background:a?col:'rgba(255,255,255,0.06)',border:`1px solid ${a?col:D.border}`,color:a?'#fff':D.muted,minHeight:44,fontFamily:D.font,transition:'all 0.15s'}}>{c==='All'?'🗺️':CAT_EMOJI[c]} {c}</button>);})}
       </div>
       <div style={{padding:'6px 14px',borderBottom:`1px solid ${D.border}`,display:'flex',gap:5,flexShrink:0}}>
-        {[['all','🗺️ All','#64748b'],['ai','🤖 AI','#00D2FF'],['community','🌟 Community','#C9A84C'],['reddit','🔴 Reddit','#F97316']].map(([id,label,col])=>{const a=source===id;return(<button key={id} onClick={()=>setSource(id)} style={{padding:'4px 9px',borderRadius:16,fontSize:10,fontWeight:a?700:500,cursor:'pointer',background:a?col+'22':'transparent',border:`1px solid ${a?col:D.border}`,color:a?col:D.muted,fontFamily:D.font,transition:'all 0.15s'}}>{label}</button>);})}
+        {[['all','🗺️ All','#64748b'],['ai','🤖 AI','#00D2FF'],['community','🌟 Community','#C9A84C'],['reddit','🔴 Reddit','#F97316'],['verified','📍 Verified','#8B5CF6']].map(([id,label,col])=>{const a=source===id;return(<button key={id} onClick={()=>setSource(id)} style={{padding:'4px 9px',borderRadius:16,fontSize:10,fontWeight:a?700:500,cursor:'pointer',background:a?col+'22':'transparent',border:`1px solid ${a?col:D.border}`,color:a?col:D.muted,fontFamily:D.font,transition:'all 0.15s'}}>{label}</button>);})}
       </div>
       <div style={{flex:1,overflowY:'auto',padding:'6px 14px'}}>
         {showSkeleton&&Array.from({length:6}).map((_,i)=><SkeletonCard key={i}/>)}
