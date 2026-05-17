@@ -78,6 +78,7 @@ export default function NavBarAuth({ view, onNav, savedCount }) {
           {user ? (
             <>
               <button onClick={() => { navigate('/dashboard'); setMenu(false); }} style={ls(false)}>📊 Dashboard</button>
+              <button onClick={() => { navigate('/night');     setMenu(false); }} style={{...ls(false),color:'#c084fc'}}>🌙 Night Explorer</button>
               <button onClick={() => { navigate('/community'); setMenu(false); }} style={ls(false)}>🗺️ Community</button>
               <button onClick={() => { navigate('/discover');  setMenu(false); }} style={ls(false)}>🔍 Discover</button>
               <button onClick={() => { navigate('/submit');    setMenu(false); }} style={ls(false)}>📍 Submit Place</button>
@@ -110,6 +111,11 @@ export default function NavBarAuth({ view, onNav, savedCount }) {
       <div style={{ flex:1 }} />
 
       {/* Community nav buttons */}
+      <button onClick={() => navigate('/night')} style={{ ...ls(false), color:'#c084fc' }}
+        onMouseEnter={e => e.currentTarget.style.color = '#fff'}
+        onMouseLeave={e => e.currentTarget.style.color = '#c084fc'}>
+        🌙 Night
+      </button>
       <button onClick={() => navigate('/community')} style={{ ...ls(false), color: D.gold }}
         onMouseEnter={e => e.currentTarget.style.color = '#fff'}
         onMouseLeave={e => e.currentTarget.style.color = D.gold}>

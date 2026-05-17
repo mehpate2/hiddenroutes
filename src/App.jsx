@@ -17,6 +17,7 @@ import AdminVerified from './pages/AdminVerified';
 import SocialConnect from './pages/SocialConnect';
 import SocialSubmit from './pages/SocialSubmit';
 import SocialHub from './pages/SocialHub';
+import NightExplorer from './pages/NightExplorer';
 import ProtectedRoute from './components/ProtectedRoute';
 import Toast from './components/Toast';
 
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="/settings/social" element={<ProtectedRoute><SocialConnect /></ProtectedRoute>} />
         <Route path="/submit/social" element={<ProtectedRoute><SocialSubmit /></ProtectedRoute>} />
         <Route path="/discover/social" element={<SocialHub />} />
+        <Route path="/night" element={<NightExplorer />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {toast && <Toast msg={toast.msg} type={toast.type} key={toast.id} />}

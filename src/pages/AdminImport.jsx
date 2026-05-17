@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
+import { getPlaceImage } from '../utils/imageHelper';
 import {
   SUBREDDITS,
   savePipelineResult,
@@ -63,7 +64,10 @@ function timeAgo(ts) {
 }
 
 function unsplash(q, w = 400, h = 220) {
-  return `https://source.unsplash.com/${w}x${h}/?${encodeURIComponent(q)}`;
+  // Extract trailing category word from query like "name state nature"
+  const words = q.trim().split(' ');
+  const cat = words[words.length - 1] || 'nature';
+  return getPlaceImage(cat, 0, w, h);
 }
 
 // ─── Score Circle ─────────────────────────────────────────────────────────────

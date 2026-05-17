@@ -14,6 +14,13 @@ import { getDiscoverFeed } from './lib/community';
 import { getApprovedRedditPlacesForState } from './lib/reddit';
 import { getVerifiedPlacesForState } from './lib/verified';
 import { getApprovedSocialPlacesForState } from './lib/social';
+import { getPlaceImage, getFallbackImage } from './utils/imageHelper';
+import RealPhoto from './components/RealPhoto';
+import WeatherWidget from './components/WeatherWidget';
+import PerfectMomentWidget from './components/PerfectMomentWidget';
+import NightExplorerWidget from './components/NightExplorerWidget';
+import SpontaneousTrip from './components/SpontaneousTrip';
+import { getWeatherForecast, getTravelAdvice, displayTemp } from './utils/weather';
 
 const KEY    = import.meta.env.VITE_ANTHROPIC_API_KEY;
 const HAIKU  = 'claude-haiku-4-5-20251001';
@@ -115,8 +122,10 @@ function hav(a, b, c, d) {
   return R*2*Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
 }
 
+// Legacy shim — replaced by getPlaceImage from imageHelper
 function unsplash(query, w=800, h=600, sig=1) {
-  return `https://source.unsplash.com/${w}x${h}/?${encodeURIComponent(query)}&sig=${sig}`;
+  const cat = query.split(' ')[0];
+  return getPlaceImage(cat, sig, w, h);
 }
 
 function getNeighbors(state, n=2) {
@@ -145,10 +154,14 @@ async function reverseGeocode(lat, lng) {
 }
 
 function loadLeaflet() {
-  return new Promise(res => {
+  return new Promise((res, rej) => {
     if (window.L) { res(window.L); return; }
-    const l = document.createElement('link'); l.rel='stylesheet'; l.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(l);
-    const s = document.createElement('script'); s.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; s.onload=()=>res(window.L); document.head.appendChild(s);
+    // CSS is preloaded from <head> via cdnjs — only need the script here
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+    s.onload = () => res(window.L);
+    s.onerror = () => rej(new Error('Leaflet failed to load'));
+    document.head.appendChild(s);
   });
 }
 
@@ -293,7 +306,7 @@ function LazyImg({ src, alt, style:s={}, detailSize=false, category='' }) {
       {errored&&<div style={{position:'absolute',inset:0,background:fallbackGradient,display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{fontSize:32,opacity:0.5}}>{CAT_EMOJI[category]||'📍'}</span></div>}
       {!errored&&<img src={cur} alt={alt} loading="lazy"
         onLoad={()=>setLoaded(true)}
-        onError={()=>setErrored(true)}
+        onError={()=>{ const fb=getFallbackImage(category); if(cur!==fb){setCur(fb);}else{setErrored(true);} }}
         style={{width:'100%',height:'100%',objectFit:'cover',display:'block',opacity:loaded?1:0,transition:'opacity 0.5s ease',filter:loaded?'none':'blur(8px)',transform:loaded?'scale(1)':'scale(1.04)'}}/>}
     </div>
   );
@@ -306,9 +319,7 @@ function PlaceModal({ place, stateName, onClose }) {
   const [tab,setTab]=useState('overview');
   const [copied,setCopied]=useState(false);
   const col=CAT_COLOR[place.category]||'#64748b';
-  const kw=CAT_KW[place.category]||'travel usa';
-  const heroSrc=unsplash(`${place.name} ${stateName||''} ${kw}`, 800, 500);
-  const galleryImgs=[1,2,3,4].map(i=>unsplash(`${place.name} ${kw}`, 400, 300, i));
+  const galleryImgs=[1,2,3,4].map(i=>getPlaceImage(place.category||'default', i, 400, 300));
   const mapsUrl=place.isVerified&&place.address?`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.address)}`:`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`;
   const lat=place.lat??0, lng=place.lng??0;
   const coord=`${Math.abs(lat).toFixed(4)}°${lat>=0?'N':'S'}, ${Math.abs(lng).toFixed(4)}°${lng>=0?'E':'W'}`;
@@ -320,7 +331,7 @@ function PlaceModal({ place, stateName, onClose }) {
     <div style={{position:'fixed',inset:0,zIndex:2000,background:'rgba(0,0,0,0.75)',backdropFilter:'blur(8px)',display:'flex',alignItems:'flex-end',justifyContent:mobile?'center':'flex-end'}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div style={sheet}>
         <div style={{position:'relative',height:220,flexShrink:0}}>
-          <LazyImg src={heroSrc} alt={place.name} style={{width:'100%',height:220}} detailSize={true} category={place.category}/>
+          <RealPhoto place={place} stateName={stateName} height={220} style={{width:'100%'}} category={place.category}/>
           <div style={{position:'absolute',inset:0,background:'linear-gradient(to bottom,transparent 30%,#111827 100%)'}}/>
           <button onClick={onClose} style={{position:'absolute',top:12,right:12,width:34,height:34,borderRadius:'50%',background:'rgba(0,0,0,0.7)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff',fontSize:18,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
           <div style={{position:'absolute',top:12,right:54,display:'flex',gap:6}}>
@@ -380,6 +391,12 @@ function PlaceModal({ place, stateName, onClose }) {
               </div>}
             </div>}
             <p style={{color:'rgba(255,255,255,0.75)',fontSize:14,lineHeight:1.7,marginBottom:16}}>{place.description}</p>
+            <div style={{fontSize:11,fontWeight:700,color:'rgba(255,255,255,0.35)',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:4}}>🌤 Weather Forecast</div>
+            <WeatherWidget place={place} />
+            <div style={{fontSize:11,fontWeight:700,color:'rgba(255,255,255,0.35)',letterSpacing:'0.08em',textTransform:'uppercase',marginTop:16,marginBottom:4}}>🌟 Perfect Moment</div>
+            <PerfectMomentWidget place={place} />
+            <div style={{fontSize:11,fontWeight:700,color:'rgba(255,255,255,0.35)',letterSpacing:'0.08em',textTransform:'uppercase',marginTop:16,marginBottom:4}}>🌙 Night Explorer</div>
+            <NightExplorerWidget place={place} />
             {place.whyDetour&&<div style={{background:D.tealDim,border:`1px solid ${D.teal}44`,borderRadius:12,padding:'12px 14px'}}>
               <div style={{fontSize:10,fontWeight:700,color:D.teal,letterSpacing:1,marginBottom:4}}>✨ WHY IT'S WORTH THE DETOUR</div>
               <p style={{color:D.off,fontSize:13,margin:0,lineHeight:1.55}}>{place.whyDetour}</p>
@@ -420,6 +437,62 @@ function PlaceModal({ place, stateName, onClose }) {
   );
 }
 
+// ─── Best Weather Banner ─────────────────────────────────────────────────────
+const WEATHER_CANDIDATES = [
+  { abbr:'CA', name:'California',     emoji:'🌊', center:[37.2,-119.4] },
+  { abbr:'CO', name:'Colorado',       emoji:'⛷️', center:[39.0,-105.5] },
+  { abbr:'UT', name:'Utah',           emoji:'🏜️', center:[39.3,-111.1] },
+  { abbr:'HI', name:'Hawaii',         emoji:'🌺', center:[20.8,-156.3] },
+  { abbr:'OR', name:'Oregon',         emoji:'🌲', center:[44.1,-120.5] },
+  { abbr:'MT', name:'Montana',        emoji:'🦌', center:[46.9,-110.4] },
+  { abbr:'AZ', name:'Arizona',        emoji:'🌵', center:[34.0,-111.1] },
+  { abbr:'NC', name:'North Carolina', emoji:'🏔️', center:[35.6,-79.8] },
+];
+
+function BestWeatherBanner({ onPickState }) {
+  const [cards, setCards] = useState([]);
+  const unit = (() => { try { return localStorage.getItem('tempUnit')||'F'; } catch { return 'F'; } })();
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(WEATHER_CANDIDATES.map(async s => {
+      const w = await getWeatherForecast(s.center[0], s.center[1]);
+      if (!w) return null;
+      const goodDays = w.days.filter(d => d.good).length;
+      const advice   = getTravelAdvice(w.days);
+      return { ...s, today: w.days[0], goodDays, advice };
+    })).then(results => {
+      if (cancelled) return;
+      const valid = results.filter(Boolean).sort((a,b)=>b.goodDays-a.goodDays||a.today.code-b.today.code);
+      setCards(valid.slice(0, 3));
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!cards.length) return null;
+  return (
+    <div style={{padding:'0 24px 20px',maxWidth:1300,margin:'0 auto'}}>
+      <div style={{fontSize:11,fontWeight:700,color:D.muted,letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>☀️ Best Weather This Week</div>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+        {cards.map(c=>(
+          <button key={c.abbr} onClick={()=>onPickState(c.abbr)}
+            style={{flex:'1 1 160px',background:D.glass,border:`1px solid ${D.border}`,borderRadius:12,padding:'12px 14px',cursor:'pointer',textAlign:'left',fontFamily:D.font,color:D.white,backdropFilter:'blur(10px)',transition:'border-color 0.2s'}}
+            onMouseEnter={e=>e.currentTarget.style.borderColor=D.teal+'88'}
+            onMouseLeave={e=>e.currentTarget.style.borderColor=D.border}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+              <span style={{fontSize:18}}>{c.today.icon}</span>
+              <span style={{fontWeight:700,fontSize:13}}>{c.name}</span>
+            </div>
+            <div style={{fontSize:12,color:D.muted}}>{displayTemp(c.today.maxTemp,unit)} · {c.today.label}</div>
+            <div style={{fontSize:10,color:'#4ade80',marginTop:3}}>✓ {c.goodDays}/7 good days</div>
+            <div style={{fontSize:10,color:'rgba(255,255,255,0.3)',marginTop:2}}>{c.advice.icon} {c.advice.message}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── State Grid ──────────────────────────────────────────────────────────────
 function StateGrid({ onSelect, planData }) {
   const mobile=useMobile(); const [q,setQ]=useState('');
@@ -438,6 +511,12 @@ function StateGrid({ onSelect, planData }) {
         </p>
         <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Filter states…" style={{padding:'11px 18px',fontSize:14,background:D.glass,border:`1px solid ${D.border}`,borderRadius:12,color:D.white,outline:'none',fontFamily:D.font,maxWidth:300,backdropFilter:'blur(10px)'}}/>
       </div>
+      <BestWeatherBanner onPickState={abbr=>{
+        const idx=US_STATES.findIndex(s=>s.abbr===abbr);
+        if(idx<0) return;
+        if(idx>=planData.statesLimit){setUpgradeModal(true);return;}
+        onSelect(US_STATES[idx]);
+      }}/>
       <div style={{display:'grid',gridTemplateColumns:mobile?'repeat(3,1fr)':'repeat(auto-fill,minmax(130px,1fr))',gap:10,padding:'0 24px 60px',maxWidth:1300,margin:'0 auto'}}>
         {filtered.map((s,i)=><StateCard key={s.abbr} state={s} locked={i >= planData.statesLimit} onClick={()=>{
           if(i >= planData.statesLimit){setUpgradeModal(true);return;}
@@ -581,8 +660,10 @@ function MapExplore({ state, onModal, userLocation }) {
     };
     const init=async()=>{
       const L=await loadLeaflet(); if(cancel)return;
-      map=L.map(mapDivRef.current).setView(state.center,7); mapRef.current=map;
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:20}).addTo(map);
+      map=L.map(mapDivRef.current,{preferCanvas:true}).setView(state.center,7); mapRef.current=map;
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:20,attribution:''}).addTo(map);
+      // Force recalculate size after the DOM settles
+      setTimeout(()=>{ if(map&&!cancel) map.invalidateSize(true); },300);
       if(userLocation){ L.marker([userLocation.lat,userLocation.lng],{icon:userPin(L)}).addTo(map).bindTooltip('You are here'); map.setView([userLocation.lat,userLocation.lng],10); }
       const onBatch=(places,fromFullCache)=>{
         if(cancel)return;
@@ -595,7 +676,9 @@ function MapExplore({ state, onModal, userLocation }) {
       if(!cancel) { addCommunityMarkers(L); addRedditMarkers(L); addVerifiedMarkers(L); addSocialMarkers(L); }
     };
     init().catch(e=>{ if(!cancel){setError(e.message);setLoading(false);} });
-    return()=>{ cancel=true; markersRef.current=[]; communityMarkersRef.current=[]; redditMarkersRef.current=[]; verifiedMarkersRef.current=[]; socialMarkersRef.current=[]; if(map)map.remove(); mapRef.current=null; };
+    const onResize=()=>{ if(mapRef.current) mapRef.current.invalidateSize(true); };
+    window.addEventListener('resize',onResize);
+    return()=>{ cancel=true; window.removeEventListener('resize',onResize); markersRef.current=[]; communityMarkersRef.current=[]; redditMarkersRef.current=[]; verifiedMarkersRef.current=[]; socialMarkersRef.current=[]; if(map)map.remove(); mapRef.current=null; };
   },[state]);
 
   useEffect(()=>{
@@ -865,7 +948,7 @@ function SavedPlaces({ onModal }) {
             <div key={i} onClick={()=>onModal(p,null)}
               style={{background:D.glass,border:`1px solid ${D.border}`,borderRadius:16,overflow:'hidden',cursor:'pointer',backdropFilter:'blur(10px)',transition:'transform 0.2s,border-color 0.2s'}}
               onMouseEnter={e=>{e.currentTarget.style.transform='scale(1.02)';e.currentTarget.style.borderColor=D.teal+'88';}} onMouseLeave={e=>{e.currentTarget.style.transform='scale(1)';e.currentTarget.style.borderColor=D.border;}}>
-              <LazyImg src={unsplash(`${p.name} ${CAT_KW[p.category]||'travel'}`)} alt={p.name} style={{height:180,overflow:'hidden'}} category={p.category}/>
+              <LazyImg src={getPlaceImage(p.category||'default', i, 400, 300)} alt={p.name} style={{height:180,overflow:'hidden'}} category={p.category}/>
               <div style={{padding:'12px 14px'}}>
                 <Badge cat={p.category}/>
                 <h3 style={{fontFamily:D.serif,fontSize:16,fontWeight:700,color:D.white,margin:'6px 0 4px'}}>{p.name}</h3>
@@ -892,6 +975,7 @@ export default function ExploreApp() {
   const [mapState, setMapState] = useState(null);
   const [userLoc, setUserLoc] = useState(null);
   const [modal, setModal] = useState(null);
+  const [surpriseOpen, setSurpriseOpen] = useState(false);
 
   const toggleSave=(place)=>{
     setSaved(prev=>{
@@ -932,6 +1016,12 @@ export default function ExploreApp() {
         {view==='route'&&<RoutePlanner onModal={(p,sn)=>setModal({place:p,stateName:sn})} planData={planData}/>}
         {view==='saved'&&<SavedPlaces onModal={(p,sn)=>setModal({place:p,stateName:sn})}/>}
         {modal&&<PlaceModal place={modal.place} stateName={modal.stateName} onClose={()=>setModal(null)}/>}
+        {view==='map'&&<button onClick={()=>setSurpriseOpen(true)} title="Surprise Me!" style={{position:'fixed',bottom:24,right:24,zIndex:600,width:56,height:56,borderRadius:'50%',background:'linear-gradient(135deg,#7C3AED,#2B9FAA)',color:'white',border:'none',fontSize:24,cursor:'pointer',boxShadow:'0 4px 24px rgba(124,58,237,0.5)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:D.font}}><span>🎲</span></button>}
+        {surpriseOpen&&<div style={{position:'fixed',inset:0,zIndex:2500,background:'rgba(0,0,0,0.88)',backdropFilter:'blur(10px)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={e=>{if(e.target===e.currentTarget)setSurpriseOpen(false);}}>
+          <div style={{width:'100%',maxWidth:440,maxHeight:'90vh',overflowY:'auto',borderRadius:16}}>
+            <SpontaneousTrip onClose={()=>setSurpriseOpen(false)}/>
+          </div>
+        </div>}
       </div>
     </AppCtx.Provider>
   );
