@@ -19,6 +19,7 @@ import RealPhoto from './components/RealPhoto';
 import WeatherWidget from './components/WeatherWidget';
 import PerfectMomentWidget from './components/PerfectMomentWidget';
 import NightExplorerWidget from './components/NightExplorerWidget';
+import SafetyCheckIn from './components/SafetyCheckIn';
 import SpontaneousTrip from './components/SpontaneousTrip';
 import { getWeatherForecast, getTravelAdvice, displayTemp } from './utils/weather';
 
@@ -397,6 +398,7 @@ function PlaceModal({ place, stateName, onClose }) {
             <PerfectMomentWidget place={place} />
             <div style={{fontSize:11,fontWeight:700,color:'rgba(255,255,255,0.35)',letterSpacing:'0.08em',textTransform:'uppercase',marginTop:16,marginBottom:4}}>🌙 Night Explorer</div>
             <NightExplorerWidget place={place} />
+            <SafetyCheckIn place={place} />
             {place.whyDetour&&<div style={{background:D.tealDim,border:`1px solid ${D.teal}44`,borderRadius:12,padding:'12px 14px'}}>
               <div style={{fontSize:10,fontWeight:700,color:D.teal,letterSpacing:1,marginBottom:4}}>✨ WHY IT'S WORTH THE DETOUR</div>
               <p style={{color:D.off,fontSize:13,margin:0,lineHeight:1.55}}>{place.whyDetour}</p>

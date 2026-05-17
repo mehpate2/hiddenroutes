@@ -88,6 +88,7 @@ export default function NavBarAuth({ view, onNav, savedCount }) {
             </>
           ) : (
             <>
+              <button onClick={() => { navigate('/night');  setMenu(false); }} style={{...ls(false),color:'#c084fc'}}>🌙 Night Explorer</button>
               <button onClick={() => { navigate('/login');  setMenu(false); }} style={ls(false)}>🔑 Login</button>
               <button onClick={() => { navigate('/signup'); setMenu(false); }} style={ls(false)}>✨ Get Started</button>
             </>
@@ -151,6 +152,7 @@ export default function NavBarAuth({ view, onNav, savedCount }) {
               </div>
               {[
                 { icon:'📊', label:'Dashboard',       action: () => navigate('/dashboard') },
+                { icon:'🤝', label:'Safety Trips',    action: () => navigate('/safety') },
                 { icon:'❤️', label:'Saved Places',    action: () => onNav('saved') },
                 { icon:'🛣️', label:'My Routes',       action: () => onNav('route') },
                 { icon:'🌟', label:'My Profile',       action: () => navigate('/profile') },
