@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getUserStats, getUserSubmissions, getLevelInfo } from '../lib/community';
 import { getSocialAccounts } from '../lib/social';
+import ExplorerDNA from '../components/ExplorerDNA';
 
 const D = {
   navy: '#0A0F1E', teal: '#00D2FF', gold: '#C9A84C',
@@ -202,6 +203,7 @@ export default function UserProfile() {
 
         {tab === 'overview' && (
           <div>
+            <ExplorerDNA userId={user.uid} />
             <div style={{ color: D.white, fontWeight: 700, fontSize: 16, marginBottom: 14, fontFamily: D.serif }}>How to Earn Points</div>
             {[
               { action: 'Submit a place', pts: '+10', color: D.teal },

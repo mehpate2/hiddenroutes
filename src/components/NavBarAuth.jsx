@@ -153,6 +153,7 @@ export default function NavBarAuth({ view, onNav, savedCount }) {
               {[
                 { icon:'📊', label:'Dashboard',       action: () => navigate('/dashboard') },
                 { icon:'🤝', label:'Safety Trips',    action: () => navigate('/safety') },
+                { icon:'🎁', label:'Invite Friends',  action: () => navigate('/referral') },
                 { icon:'❤️', label:'Saved Places',    action: () => onNav('saved') },
                 { icon:'🛣️', label:'My Routes',       action: () => onNav('route') },
                 { icon:'🌟', label:'My Profile',       action: () => navigate('/profile') },

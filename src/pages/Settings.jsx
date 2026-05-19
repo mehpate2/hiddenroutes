@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential, deleteUser } from 'firebase/auth';
 import { auth, isConfigured } from '../firebase';
+import { getStorageInfo, deleteOfflineState } from '../utils/offlineManager';
 
 const D = {
   navy:'#0A0F1E', navyLight:'#111827', teal:'#00D2FF', gold:'#FFB347',
@@ -39,6 +40,74 @@ function SaveBtn({ onClick, loading, label='Save Changes' }) {
       style={{ padding:'12px 28px', borderRadius:11, border:'none', cursor:loading?'not-allowed':'pointer', fontSize:14, fontWeight:700, fontFamily:D.font, background:'linear-gradient(135deg,#00D2FF,#3A7BD5)', color:'#fff', opacity:loading?0.7:1, display:'inline-flex', alignItems:'center', gap:8, transition:'all 0.2s', minHeight:46 }}>
       {loading ? <><span style={{ width:14, height:14, borderRadius:'50%', border:'2px solid rgba(255,255,255,0.3)', borderTopColor:'#fff', animation:'spin 0.7s linear infinite', display:'inline-block' }}/> Saving…</> : label}
     </button>
+  );
+}
+
+function OfflineSection() {
+  const [info,    setInfo]    = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => { getStorageInfo().then(setInfo); }, []);
+
+  const handleDelete = async (abbr, name) => {
+    if (!confirm(`Remove ${name} offline data?`)) return;
+    setLoading(true);
+    await deleteOfflineState(abbr);
+    const updated = await getStorageInfo();
+    setInfo(updated);
+    setLoading(false);
+  };
+
+  const handleClearAll = async () => {
+    if (!confirm('Remove ALL offline data?')) return;
+    setLoading(true);
+    for (const s of (info?.states || [])) await deleteOfflineState(s.abbr);
+    setInfo(await getStorageInfo());
+    setLoading(false);
+  };
+
+  return (
+    <Section title="📵 Offline & Storage">
+      {info && info.statesDownloaded > 0 ? (
+        <>
+          <div style={{ color:D.muted, fontSize:13, marginBottom:16 }}>
+            {info.statesDownloaded} state{info.statesDownloaded !== 1 ? 's' : ''} downloaded · {info.totalSizeMB} MB used
+          </div>
+          {info.states.map(s => (
+            <div key={s.abbr} style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+              padding:'10px 0', borderBottom:`1px solid rgba(255,255,255,0.06)` }}>
+              <div>
+                <div style={{ color:D.white, fontSize:14, fontWeight:600 }}>{s.name}</div>
+                <div style={{ color:D.muted, fontSize:12 }}>
+                  {s.placesCount} places · {((s.size || 0) / 1024).toFixed(0)} KB
+                  · Downloaded {new Date(s.downloadedAt).toLocaleDateString()}
+                </div>
+              </div>
+              <button onClick={() => handleDelete(s.abbr, s.name)} disabled={loading}
+                style={{ padding:'6px 12px', borderRadius:8, border:'1px solid rgba(239,68,68,0.3)',
+                  background:'rgba(239,68,68,0.08)', color:'#ef4444', cursor:'pointer',
+                  fontSize:12, fontFamily:D.font }}>
+                Remove
+              </button>
+            </div>
+          ))}
+          <div style={{ marginTop:16 }}>
+            <button onClick={handleClearAll} disabled={loading}
+              style={{ background:'none', border:'none', color:'rgba(239,68,68,0.7)',
+                cursor:'pointer', fontSize:13, fontFamily:D.font, padding:0, textDecoration:'underline' }}>
+              Clear all offline data
+            </button>
+          </div>
+        </>
+      ) : (
+        <div>
+          <p style={{ color:D.muted, fontSize:13, lineHeight:1.6, marginBottom:0 }}>
+            No offline data downloaded yet. Open the map, select a state, and use the
+            <strong style={{ color:D.white }}> Download for Offline</strong> button on any place detail.
+          </p>
+        </div>
+      )}
+    </Section>
   );
 }
 
@@ -207,6 +276,9 @@ export default function Settings() {
             </Link>
           </div>
         </Section>
+
+        {/* Offline & Storage */}
+        <OfflineSection />
 
         {/* Danger Zone */}
         <Section title="⚠️ Danger Zone">

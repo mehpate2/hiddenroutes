@@ -21,6 +21,10 @@ import PerfectMomentWidget from './components/PerfectMomentWidget';
 import NightExplorerWidget from './components/NightExplorerWidget';
 import SafetyCheckIn from './components/SafetyCheckIn';
 import SpontaneousTrip from './components/SpontaneousTrip';
+import ShareableCard from './components/ShareableCard';
+import { OfflineBanner } from './components/OfflineManager';
+import { calculateSilenceScore } from './utils/silenceScore';
+import { trackPlaceView, calculateDNA } from './utils/explorerDNA';
 import { getWeatherForecast, getTravelAdvice, displayTemp } from './utils/weather';
 
 const KEY    = import.meta.env.VITE_ANTHROPIC_API_KEY;
@@ -316,9 +320,13 @@ function LazyImg({ src, alt, style:s={}, detailSize=false, category='' }) {
 // ─── Place Detail Modal ──────────────────────────────────────────────────────
 function PlaceModal({ place, stateName, onClose }) {
   const { toggleSave, isSaved }=useContext(AppCtx);
+  const { user }=useAuth();
   const mobile=useMobile();
   const [tab,setTab]=useState('overview');
   const [copied,setCopied]=useState(false);
+  const [shareCardOpen,setShareCardOpen]=useState(false);
+  const [heroPhoto,setHeroPhoto]=useState(null);
+  const silence=calculateSilenceScore(place);
   const col=CAT_COLOR[place.category]||'#64748b';
   const galleryImgs=[1,2,3,4].map(i=>getPlaceImage(place.category||'default', i, 400, 300));
   const mapsUrl=place.isVerified&&place.address?`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.address)}`:`https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lng}`;
@@ -328,7 +336,9 @@ function PlaceModal({ place, stateName, onClose }) {
   const handleShare=()=>{ if(navigator.share)navigator.share({title:place.name,text:place.description,url:window.location.href}); else{navigator.clipboard.writeText(`${place.name} — ${place.description}\nGPS: ${coord}`);setCopied(true);setTimeout(()=>setCopied(false),2000);} };
   const sheet={background:'#111827',...(mobile?{width:'100%',maxHeight:'92vh',borderRadius:'20px 20px 0 0',animation:'slideUp 0.35s cubic-bezier(0.4,0,0.2,1)'}:{width:440,height:'100vh',animation:'slideRight 0.35s cubic-bezier(0.4,0,0.2,1)'}),display:'flex',flexDirection:'column',overflow:'hidden'};
   const tabBtn=(t,label)=><button onClick={()=>setTab(t)} style={{flex:1,padding:'11px 0',background:'none',border:'none',borderBottom:`2px solid ${tab===t?D.teal:'transparent'}`,color:tab===t?D.teal:'rgba(255,255,255,0.4)',fontWeight:600,fontSize:12,cursor:'pointer',fontFamily:D.font,transition:'all 0.2s'}}>{label}</button>;
+  useEffect(()=>{ if(user?.uid) trackPlaceView(place, user.uid); },[place.name]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
+    <>
     <div style={{position:'fixed',inset:0,zIndex:2000,background:'rgba(0,0,0,0.75)',backdropFilter:'blur(8px)',display:'flex',alignItems:'flex-end',justifyContent:mobile?'center':'flex-end'}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div style={sheet}>
         <div style={{position:'relative',height:220,flexShrink:0}}>
@@ -337,15 +347,19 @@ function PlaceModal({ place, stateName, onClose }) {
           <button onClick={onClose} style={{position:'absolute',top:12,right:12,width:34,height:34,borderRadius:'50%',background:'rgba(0,0,0,0.7)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff',fontSize:18,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
           <div style={{position:'absolute',top:12,right:54,display:'flex',gap:6}}>
             <button onClick={()=>toggleSave(place)} style={{width:34,height:34,borderRadius:'50%',background:'rgba(0,0,0,0.7)',border:'1px solid rgba(255,255,255,0.2)',color:saved_?'#ef4444':'#fff',fontSize:16,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'color 0.2s'}}>{saved_?'❤️':'🤍'}</button>
+            <button onClick={()=>setShareCardOpen(true)} title="Share This Place" style={{width:34,height:34,borderRadius:'50%',background:'rgba(0,0,0,0.7)',border:'1px solid rgba(255,255,255,0.2)',color:'#c9a84c',fontSize:15,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>✦</button>
             <button onClick={handleShare} style={{width:34,height:34,borderRadius:'50%',background:'rgba(0,0,0,0.7)',border:'1px solid rgba(255,255,255,0.2)',color:'#fff',fontSize:15,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>{copied?'✓':'↗'}</button>
           </div>
           <div style={{position:'absolute',bottom:12,left:16}}><Badge cat={place.category}/>{place._region&&<span style={{marginLeft:8,fontSize:10,color:'rgba(255,255,255,0.5)'}}>· {place._region}</span>}</div>
         </div>
         <div style={{padding:'14px 20px 0',flexShrink:0}}>
           <h2 style={{fontFamily:D.serif,fontSize:22,fontWeight:700,color:D.white,margin:'0 0 6px',lineHeight:1.2}}>{place.name}</h2>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
             <Stars rating={place.rating||4} size={16}/>
             {place.distanceFromRoute!=null&&<span style={{fontSize:11,color:D.gold,fontWeight:600}}>· {typeof place.distanceFromRoute==='number'?place.distanceFromRoute.toFixed(1):place.distanceFromRoute} mi off route</span>}
+            <span style={{fontSize:11,color:silence.score>=7?'#4ade80':silence.score>=5?'#c9a84c':'#8a8272',display:'flex',alignItems:'center',gap:3}}>
+              {silence.icon} {silence.label} <span style={{color:'rgba(255,255,255,0.3)'}}>{silence.score}/10</span>
+            </span>
           </div>
         </div>
         <div style={{display:'flex',borderBottom:'1px solid rgba(255,255,255,0.1)',margin:'12px 0 0',flexShrink:0}}>
@@ -436,6 +450,8 @@ function PlaceModal({ place, stateName, onClose }) {
         </div>
       </div>
     </div>
+    {shareCardOpen&&<ShareableCard place={place} photo={heroPhoto} onClose={()=>setShareCardOpen(false)}/>}
+    </>
   );
 }
 
@@ -752,6 +768,7 @@ function MapExplore({ state, onModal, userLocation }) {
 function SidebarCard({ place, onClick, userLoc }) {
   const [hov,setHov]=useState(false); const col=CAT_COLOR[place.category]||'#64748b';
   const dist=userLoc?hav(userLoc.lat,userLoc.lng,place.lat,place.lng):null;
+  const silence=calculateSilenceScore(place);
   return (
     <div onClick={onClick} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
       style={{padding:'9px 11px 9px 13px',borderRadius:9,cursor:'pointer',background:hov?D.glassH:'transparent',border:`1px solid ${hov?D.border:'transparent'}`,borderLeft:`4px solid ${hov?col:col+'55'}`,transition:'all 0.15s',marginBottom:4,minHeight:44,boxShadow:hov?`0 2px 12px ${col}22`:'none'}}>
@@ -762,7 +779,10 @@ function SidebarCard({ place, onClick, userLoc }) {
         <span style={{fontSize:8,fontWeight:700,color:col,background:`${col}22`,padding:'2px 6px',borderRadius:4,letterSpacing:0.3,flexShrink:0}}>{(place.category||'').slice(0,3).toUpperCase()}</span>
       </div>
       <p style={{fontSize:10,color:D.muted,margin:0,lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{place.description}</p>
-      <Stars rating={place.rating||4} size={11}/>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginTop:3}}>
+        <Stars rating={place.rating||4} size={11}/>
+        <span style={{fontSize:9,color:silence.score>=7?'#4ade80':silence.score>=5?'#c9a84c':'#6b7a9a'}}>{silence.icon} {silence.score}/10</span>
+      </div>
     </div>
   );
 }
@@ -1012,6 +1032,7 @@ export default function ExploreApp() {
   return (
     <AppCtx.Provider value={{saved,toggleSave,isSaved}}>
       <div style={{fontFamily:"'Inter',system-ui,sans-serif",background:'#0A0F1E',color:'#FFFFFF'}}>
+        <OfflineBanner/>
         <NavBarAuth view={view} onNav={handleNav} savedCount={saved.length}/>
         {view==='states'&&<StateGrid onSelect={s=>{setMapState(s);setView('map');}} planData={planData}/>}
         {view==='map'&&mapState&&<MapExplore state={mapState} onModal={(p,sn)=>setModal({place:p,stateName:sn})} userLocation={userLoc}/>}

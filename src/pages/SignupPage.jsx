@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { processReferral } from '../utils/referral';
 
 const D = {
   navy:'#0A0F1E', teal:'#00D2FF', gold:'#FFB347',
@@ -169,7 +170,12 @@ export default function SignupPage() {
     if (!agreed) { triggerShake('Please agree to the Terms & Privacy Policy.'); return; }
     setLoading(true); setError('');
     try {
-      await signup(email, password, name.trim());
+      const userCred = await signup(email, password, name.trim());
+      const refCode  = searchParams.get('ref') || localStorage.getItem('referralCode');
+      if (refCode && userCred?.user?.uid) {
+        processReferral(refCode, userCred.user.uid).catch(() => {});
+        localStorage.removeItem('referralCode');
+      }
       setVerificationSent(true);
       setTimeout(() => redirectAfterSignup(), 2000);
     } catch (err) {
@@ -179,6 +185,8 @@ export default function SignupPage() {
 
   const handleGoogle = async () => {
     if (!agreed) { triggerShake('Please agree to the Terms & Privacy Policy first.'); return; }
+    const refCode = searchParams.get('ref');
+    if (refCode) localStorage.setItem('referralCode', refCode);
     setLoading(true); setError('');
     try {
       await loginWithGoogle();
